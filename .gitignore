@@ -2,3 +2,14 @@
 venv/
 __pycache__/
 dummy_artifact.txt
+# Archivos de estado local y de inicialización
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+
+# Variables con información sensible
+*.tfvars
+
+# Excepciones
+!terraform.tfvars.example
