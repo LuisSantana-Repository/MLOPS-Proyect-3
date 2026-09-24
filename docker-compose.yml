@@ -1,0 +1,98 @@
+services:
+  db:
+    image: mariadb:10.11
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    # Cambiamos el puerto externo al 3307 para evitar conflictos con MySQL nativo de Windows
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    # Usamos quay.io para asegurar la descarga correcta de la imagen
+    image: quay.io/minio/minio
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  createbuckets:
+    image: amazon/aws-cli
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: >
+      /bin/sh -c "
+      aws --endpoint-url http://minio:9000 s3 mb s3://${MLFLOW_BUCKET_NAME} || true;
+      exit 0;
+      "
+
+  mlflow:
+    image: python:3.11-slim
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      # Desactiva la protección de host para permitir conexiones desde el worker
+      MLFLOW_DNS_REBINDING_PROTECTION_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: >
+      bash -c "pip install mlflow[extras] PyMySQL cryptography boto3 &&
+      mlflow server --backend-store-uri mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE} --default-artifact-root s3://${MLFLOW_BUCKET_NAME}/ --host 0.0.0.0 --port 5000"
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "${REDIS_PORT}:6379"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: always
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      REDIS_HOST: redis
+    depends_on:
+      - mlflow
+      - redis
+
+volumes:
+  db_data:
+  minio_data:
