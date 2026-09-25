@@ -13,3 +13,6 @@ __pycache__/
 
 # Environment variables
 .env
+
+# Artefactos de prueba
+dummy_artifact.txt
