@@ -1,4 +1,15 @@
-.env
+# Environments
 venv/
+.venv/
 __pycache__/
-dummy_artifact.txt
+*.pyc
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!terraform.tfvars.example
+
+# Environment variables
+.env

@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias con versión fija de mlflow (Corrección T01)
+RUN pip install --no-cache-dir mlflow==2.11.1 pymysql cryptography boto3
+
+EXPOSE 5000
+
+CMD ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]
