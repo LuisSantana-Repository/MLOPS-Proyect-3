@@ -1,0 +1,9 @@
+{
+  "release_tag": "proyecto2 v1.1.0@dc9376e",
+  "annotations_path": "data/source/coco-dataset.json",
+  "annotations_md5": "72e5f4025c4dbe7eb1e2420a9b4dbf9a",
+  "git_commit_repo_actual": "53d48b31eefbd54de08765334eb6fe80ffe7a8fa",
+  "generado_en": "2026-09-25T23:41:39+00:00",
+  "dvc_file": "data/source/release_p2_dvc.txt",
+  "dvc_file_content": "# proyecto2 v1.1.0 @ dc9376eeb7f6dade3cfca4c0b8d95fd8773d8e57\n# data/raw.dvc\nouts:\n- md5: 1fdb1dcea3218ad2fb0edf985984a929.dir\n  size: 229621498\n  nfiles: 689\n  hash: md5\n  path: raw\n# data/annotations/coco-dataset.json.dvc\nouts:\n- md5: 72e5f4025c4dbe7eb1e2420a9b4dbf9a\n  size: 474948\n  hash: md5\n  path: coco-dataset.json\n"
+}
