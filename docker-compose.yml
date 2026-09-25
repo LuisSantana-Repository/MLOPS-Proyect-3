@@ -19,8 +19,8 @@ services:
       retries: 5
 
   minio:
-    # Usamos quay.io para asegurar la descarga correcta de la imagen
-    image: quay.io/minio/minio
+    # Se fijó la versión de MinIO (Corrección T01)
+    image: quay.io/minio/minio:RELEASE.2023-09-04T19-57-37Z
     restart: always
     ports:
       - "9000:9000"
@@ -53,7 +53,10 @@ services:
       "
 
   mlflow:
-    image: python:3.11-slim
+    # Se usa el nuevo Dockerfile.mlflow para evitar pip install en cada arranque (Corrección T01)
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
     restart: always
     ports:
       - "5000:5000"
@@ -61,7 +64,6 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      # Desactiva la protección de host para permitir conexiones desde el worker
       MLFLOW_DNS_REBINDING_PROTECTION_ENABLED: "false"
     depends_on:
       db:
@@ -69,8 +71,13 @@ services:
       minio:
         condition: service_healthy
     command: >
-      bash -c "pip install mlflow[extras] PyMySQL cryptography boto3 &&
-      mlflow server --backend-store-uri mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE} --default-artifact-root s3://${MLFLOW_BUCKET_NAME}/ --host 0.0.0.0 --port 5000"
+      mlflow server --backend-store-uri mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE} --default-artifact-root s3://${MLFLOW_BUCKET_NAME}/ --host 0.0.0.0 --port 5000
+    # Se añade un healthcheck a mlflow para que el worker lo espere (Corrección T01)
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -90,8 +97,11 @@ services:
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
       REDIS_HOST: redis
     depends_on:
-      - mlflow
-      - redis
+      redis:
+        condition: service_started
+      mlflow:
+        # El worker ahora espera a que mlflow esté saludable (Corrección T01)
+        condition: service_healthy
 
 volumes:
   db_data:
