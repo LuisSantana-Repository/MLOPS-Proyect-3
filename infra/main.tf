@@ -53,25 +53,32 @@ resource "aws_iam_access_key" "ml_models_user_key" {
 # Política de mínimo privilegio
 data "aws_iam_policy_document" "ml_models_policy_doc" {
   statement {
-    sid       = "AllowListBucketModels"
+    sid       = "AllowListBucketModelsAndDVC"
     effect    = "Allow"
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.ml_models.arn]
+
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
-      values   = ["models/*"]
+      values   = [
+        "models/*",
+        "dvc/*"
+      ]
     }
   }
 
   statement {
-    sid       = "AllowPutGetModels"
+    sid       = "AllowPutGetModelsAndDVC"
     effect    = "Allow"
     actions   = [
-      "s3:PutObject",
-      "s3:GetObject"
+      "s3:GetObject",
+      "s3:PutObject"
     ]
-    resources = ["${aws_s3_bucket.ml_models.arn}/models/*"]
+    resources = [
+      "${aws_s3_bucket.ml_models.arn}/models/*",
+      "${aws_s3_bucket.ml_models.arn}/dvc/*"
+    ]
   }
 }
 
