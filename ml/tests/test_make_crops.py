@@ -2,10 +2,9 @@ import csv
 import json
 from pathlib import Path
 
+import make_crops as mc
 import pytest
 from PIL import Image
-
-import make_crops as mc
 
 # ---------------------------------------------------------------------------
 # Fixture: dataset COCO sintético pequeño
