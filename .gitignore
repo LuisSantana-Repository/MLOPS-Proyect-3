@@ -10,3 +10,21 @@ runs/
 mlruns/
 *.pt
 *.pth
+# Environments
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!terraform.tfvars.example
+
+# Environment variables
+.env
+
+# Artefactos de prueba
+dummy_artifact.txt

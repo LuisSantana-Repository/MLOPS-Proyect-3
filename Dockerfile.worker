@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias del worker
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# CORRECCIÓN: Fijar la versión exacta de mlflow para que coincida con el servidor
+RUN pip install --no-cache-dir mlflow==2.11.1 boto3 redis pandas
+
+COPY worker.py .
+
+# Ejecutar sin búfer para ver logs en tiempo real
+CMD ["python", "-u", "worker.py"]
