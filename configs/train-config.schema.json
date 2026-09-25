@@ -1,0 +1,222 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "manifest_path": {
+      "description": "manifest.csv de T04 (crop_path, category_name, split, ...).",
+      "format": "path",
+      "title": "Manifest Path",
+      "type": "string"
+    },
+    "classes_path": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "classes.json congelado por T03 ({'0': 'clase', ...}). Si falta, las clases se derivan del split train en orden alfabético.",
+      "title": "Classes Path"
+    },
+    "data_root": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Carpeta base de crop_path relativos. Por defecto, la carpeta del manifiesto.",
+      "title": "Data Root"
+    },
+    "output_dir": {
+      "description": "Carpeta donde se escribe el paquete del modelo.",
+      "format": "path",
+      "title": "Output Dir",
+      "type": "string"
+    },
+    "optimizer": {
+      "default": "adamw",
+      "enum": [
+        "sgd",
+        "adam",
+        "adamw"
+      ],
+      "title": "Optimizer",
+      "type": "string"
+    },
+    "batch_size": {
+      "default": 32,
+      "maximum": 1024,
+      "minimum": 1,
+      "title": "Batch Size",
+      "type": "integer"
+    },
+    "max_epochs": {
+      "default": 30,
+      "maximum": 500,
+      "minimum": 1,
+      "title": "Max Epochs",
+      "type": "integer"
+    },
+    "lr": {
+      "default": 0.001,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Lr",
+      "type": "number"
+    },
+    "img_size": {
+      "default": 224,
+      "maximum": 512,
+      "minimum": 32,
+      "title": "Img Size",
+      "type": "integer"
+    },
+    "hidden_layers": {
+      "description": "Neuronas por capa oculta de la cabeza MLP; [] = capa lineal directa.",
+      "items": {
+        "type": "integer"
+      },
+      "maxItems": 4,
+      "title": "Hidden Layers",
+      "type": "array"
+    },
+    "dropout": {
+      "default": 0.3,
+      "exclusiveMaximum": 1,
+      "minimum": 0,
+      "title": "Dropout",
+      "type": "number"
+    },
+    "shuffle_seed": {
+      "default": 42,
+      "maximum": 4294967295,
+      "minimum": 0,
+      "title": "Shuffle Seed",
+      "type": "integer"
+    },
+    "aug_seed": {
+      "default": 43,
+      "maximum": 4294967295,
+      "minimum": 0,
+      "title": "Aug Seed",
+      "type": "integer"
+    },
+    "init_seed": {
+      "default": 44,
+      "maximum": 4294967295,
+      "minimum": 0,
+      "title": "Init Seed",
+      "type": "integer"
+    },
+    "monitor": {
+      "default": "val_loss",
+      "enum": [
+        "val_loss",
+        "val_acc"
+      ],
+      "title": "Monitor",
+      "type": "string"
+    },
+    "patience": {
+      "default": 5,
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Patience",
+      "type": "integer"
+    },
+    "min_delta": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Min Delta",
+      "type": "number"
+    },
+    "backbone": {
+      "const": "resnet18",
+      "default": "resnet18",
+      "title": "Backbone",
+      "type": "string"
+    },
+    "pretrained": {
+      "default": true,
+      "description": "Inicia el backbone con torchvision ResNet18_Weights.IMAGENET1K_V1.",
+      "title": "Pretrained",
+      "type": "boolean"
+    },
+    "trainable_backbone": {
+      "default": "none",
+      "description": "none = solo la cabeza entrena; layer4 = además el último bloque; all = fine-tune completo.",
+      "enum": [
+        "none",
+        "layer4",
+        "all"
+      ],
+      "title": "Trainable Backbone",
+      "type": "string"
+    },
+    "momentum": {
+      "default": 0.9,
+      "description": "Solo aplica a sgd.",
+      "exclusiveMaximum": 1,
+      "minimum": 0,
+      "title": "Momentum",
+      "type": "number"
+    },
+    "weight_decay": {
+      "default": 0.0,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Weight Decay",
+      "type": "number"
+    },
+    "device": {
+      "default": "auto",
+      "enum": [
+        "auto",
+        "cpu",
+        "cuda"
+      ],
+      "title": "Device",
+      "type": "string"
+    },
+    "num_workers": {
+      "default": 0,
+      "maximum": 32,
+      "minimum": 0,
+      "title": "Num Workers",
+      "type": "integer"
+    },
+    "deterministic": {
+      "default": true,
+      "title": "Deterministic",
+      "type": "boolean"
+    },
+    "max_samples_per_class": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Límite por clase y split (lo usa --smoke). None = todos.",
+      "title": "Max Samples Per Class"
+    }
+  },
+  "required": [
+    "manifest_path",
+    "output_dir"
+  ],
+  "title": "TrainConfig",
+  "type": "object"
+}
