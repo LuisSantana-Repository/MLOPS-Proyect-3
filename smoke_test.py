@@ -4,9 +4,16 @@ import time
 
 import mlflow
 
+<<<<<<< HEAD
 # 1. Leer credenciales del entorno (Corrección T01 - Secretos fuera de Git)
 os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("MINIO_ROOT_USER", "minio_admin")
 os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("MINIO_ROOT_PASSWORD", "minio_secret")
+=======
+
+# CORRECCIÓN: Leer estrictamente del entorno sin valores por defecto en duro
+os.environ["AWS_ACCESS_KEY_ID"] = os.environ["MINIO_ROOT_USER"]
+os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ["MINIO_ROOT_PASSWORD"]
+>>>>>>> 4dad9c0 (fix: fija mlflow==2.11.1 en worker y remueve defaults en smoke_test segun feedback)
 
 # Configuración para que el script acceda al entorno local
 os.environ["MLFLOW_TRACKING_URI"] = "http://localhost:5000"

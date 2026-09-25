@@ -4,7 +4,8 @@ WORKDIR /app
 
 # Instalar dependencias del worker
 RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir mlflow boto3 redis pandas
+# CORRECCIÓN: Fijar la versión exacta de mlflow para que coincida con el servidor
+RUN pip install --no-cache-dir mlflow==2.11.1 boto3 redis pandas
 
 COPY worker.py .
 
