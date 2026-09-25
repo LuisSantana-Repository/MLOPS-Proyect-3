@@ -1,0 +1,14 @@
+# Dependencias fijadas del entrenador (T05). Python 3.11.
+# PyTorch CPU:  pip install -r requirements-trainer.txt --extra-index-url https://download.pytorch.org/whl/cpu
+# Con GPU, cambia el índice por el de tu versión de CUDA manteniendo las mismas versiones.
+torch==2.14.0
+torchvision==0.29.0
+numpy==2.4.6
+pandas==3.0.6
+pillow==12.3.0
+pydantic==2.13.5
+PyYAML==6.0.3
+
+# Desarrollo
+pytest==9.1.1
+ruff==0.16.9

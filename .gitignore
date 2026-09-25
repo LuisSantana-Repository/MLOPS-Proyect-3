@@ -1,3 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Salidas de entrenamiento y pesos (se publican con MLflow/S3, no en Git; los datos los ignora DVC)
+runs/
+mlruns/
+*.pt
+*.pth
 # Environments
 venv/
 .venv/
