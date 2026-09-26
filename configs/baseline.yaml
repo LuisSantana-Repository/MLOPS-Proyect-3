@@ -1,0 +1,30 @@
+# Línea base del clasificador (T05). Punto de partida para las 10 corridas de T07.
+# Rutas relativas al directorio desde el que se ejecuta `python -m trainer`.
+# TODO(T03/T04): confirmar rutas finales del manifiesto y del classes.json congelado.
+
+manifest_path: data/p3/manifest.csv   # T04: crop_path, ann_id, image_id, category_id, category_name, split, group_id
+classes_path: data/p3/classes.json    # T03: {"0": "clase", ...}
+output_dir: runs/baseline
+
+# Los 7 hiperparámetros
+optimizer: adamw
+batch_size: 32
+max_epochs: 30
+lr: 0.001
+img_size: 224
+hidden_layers: [256]
+dropout: 0.3
+
+# Semillas separadas
+shuffle_seed: 42
+aug_seed: 43
+init_seed: 44
+
+# Early stopping (métrica de selección acordada: menor val_loss)
+monitor: val_loss
+patience: 5
+min_delta: 0.001
+
+# Backbone: ResNet18 con pesos ImageNet (torchvision IMAGENET1K_V1)
+pretrained: true
+trainable_backbone: layer4
