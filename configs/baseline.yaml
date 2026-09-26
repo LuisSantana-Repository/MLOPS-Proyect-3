@@ -1,9 +1,9 @@
 # Línea base del clasificador (T05). Punto de partida para las 10 corridas de T07.
 # Rutas relativas al directorio desde el que se ejecuta `python -m trainer`.
-# TODO(T03/T04): confirmar rutas finales del manifiesto y del classes.json congelado.
 
-manifest_path: data/p3/manifest.csv   # T04: crop_path, ann_id, image_id, category_id, category_name, split, group_id
-classes_path: data/p3/classes.json    # T03: {"0": "clase", ...}
+manifest_path: data/splits/manifest.csv   # T04: split 70/20/10, semilla 42, sin fuga
+classes_path: data/crops/classes.json     # T03: {"0": "person", "1": "car"}
+data_root: data/crops                     # crop_path es relativo a esta carpeta
 output_dir: runs/baseline
 
 # Los 7 hiperparámetros
