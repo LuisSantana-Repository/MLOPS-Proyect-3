@@ -42,9 +42,7 @@ from PIL import Image
 from sklearn.model_selection import StratifiedGroupKFold
 
 DEFAULT_SEED = 42
-DEFAULT_PHASH_THRESHOLD = (
-    5  # bits de 64; alinearlo con el analizador de duplicados del P2
-)
+DEFAULT_PHASH_THRESHOLD = 5  # bits de 64; alinearlo con el analizador de duplicados del P2
 N_FOLDS = 10
 SPLITS = ("train", "val", "test")
 REQUIRED_COLUMNS = {"crop_path", "ann_id", "image_id", "category_name"}
@@ -76,9 +74,7 @@ def read_crops(path: Path) -> list[dict]:
         reader = csv.DictReader(f)
         missing = REQUIRED_COLUMNS - set(reader.fieldnames or [])
         if missing:
-            raise InputError(
-                f"Al CSV de recortes le faltan columnas: {sorted(missing)}"
-            )
+            raise InputError(f"Al CSV de recortes le faltan columnas: {sorted(missing)}")
         rows = list(reader)
     if not rows:
         raise InputError(f"El CSV de recortes está vacío: {path}")
@@ -88,9 +84,7 @@ def read_crops(path: Path) -> list[dict]:
     return sorted(rows, key=lambda r: r["ann_id"])
 
 
-def image_paths(
-    annotations: Path, images_dir: Path, image_ids: set[int]
-) -> dict[int, Path]:
+def image_paths(annotations: Path, images_dir: Path, image_ids: set[int]) -> dict[int, Path]:
     """Mapa image_id -> archivo original, solo para las imágenes que tienen recortes."""
     if not annotations.is_file():
         raise InputError(f"No existe el archivo de anotaciones: {annotations}")
@@ -106,9 +100,7 @@ def image_paths(
     paths = {i: images_dir / names[i] for i in sorted(image_ids)}
     missing = [str(p) for p in paths.values() if not p.is_file()]
     if missing:
-        raise InputError(
-            f"Faltan {len(missing)} imágenes originales, p. ej. {missing[:3]}"
-        )
+        raise InputError(f"Faltan {len(missing)} imágenes originales, p. ej. {missing[:3]}")
     return paths
 
 
@@ -129,17 +121,10 @@ def hamming(a: int, b: int) -> int:
     return (a ^ b).bit_count()
 
 
-def near_duplicate_pairs(
-    hashes: dict[int, int], threshold: int
-) -> list[tuple[int, int]]:
+def near_duplicate_pairs(hashes: dict[int, int], threshold: int) -> list[tuple[int, int]]:
     """Pares (a, b) con a < b cuya distancia de Hamming es <= threshold."""
     ids = sorted(hashes)
-    return [
-        (a, b)
-        for i, a in enumerate(ids)
-        for b in ids[i + 1 :]
-        if hamming(hashes[a], hashes[b]) <= threshold
-    ]
+    return [(a, b) for i, a in enumerate(ids) for b in ids[i + 1 :] if hamming(hashes[a], hashes[b]) <= threshold]
 
 
 class UnionFind:
@@ -180,9 +165,7 @@ def fold_to_split(fold: int) -> str:
     return "train"
 
 
-def assign_splits(
-    rows: list[dict], group_of: dict[int, str], seed: int
-) -> dict[str, str]:
+def assign_splits(rows: list[dict], group_of: dict[int, str], seed: int) -> dict[str, str]:
     """group_id -> split, con StratifiedGroupKFold estratificado por clase."""
     groups = [group_of[r["image_id"]] for r in rows]
     n_groups = len(set(groups))
@@ -197,9 +180,7 @@ def assign_splits(
     return split_of
 
 
-def build_manifest(
-    rows: list[dict], group_of: dict[int, str], split_of: dict[str, str]
-):
+def build_manifest(rows: list[dict], group_of: dict[int, str], split_of: dict[str, str]):
     manifest = []
     for r in rows:
         gid = group_of[r["image_id"]]
@@ -223,9 +204,7 @@ def build_manifest(
 # ---------------------------------------------------------------------------
 
 
-def find_leakage(
-    manifest: list[dict], hashes: dict[int, int] | None = None, threshold: int = 0
-) -> dict:
+def find_leakage(manifest: list[dict], hashes: dict[int, int] | None = None, threshold: int = 0) -> dict:
     """Busca fuga de forma independiente al split. Todo en cero = sin fuga."""
     splits_by_group: dict[str, set] = defaultdict(set)
     splits_by_image: dict[int, set] = defaultdict(set)
@@ -238,12 +217,8 @@ def find_leakage(
 
     cross_pairs = []
     if hashes is not None:
-        split_of_image = {
-            i: next(iter(s)) for i, s in splits_by_image.items() if len(s) == 1
-        }
-        for a, b in near_duplicate_pairs(
-            {i: hashes[i] for i in split_of_image}, threshold
-        ):
+        split_of_image = {i: next(iter(s)) for i, s in splits_by_image.items() if len(s) == 1}
+        for a, b in near_duplicate_pairs({i: hashes[i] for i in split_of_image}, threshold):
             if split_of_image[a] != split_of_image[b]:
                 cross_pairs.append([a, b])
 
@@ -296,9 +271,7 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def print_report(
-    report: list[dict], leak: dict, n_groups: int, n_merged: int, fp: str
-) -> None:
+def print_report(report: list[dict], leak: dict, n_groups: int, n_merged: int, fp: str) -> None:
     header = f"{'clase':<12}{'total':>7}" + "".join(f"{s:>14}" for s in SPLITS)
     print("Conteos por clase y split")
     print(header)
