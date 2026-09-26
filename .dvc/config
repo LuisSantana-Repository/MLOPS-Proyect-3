@@ -1,0 +1,5 @@
+[core]
+    remote = storage
+['remote "storage"']
+    url = s3://ml-models-proyecto3-2c1a70d3/dvc
+    region = us-east-1

@@ -1,0 +1,4 @@
+category_id,category_name,n_imagenes_originales,n_imagenes_con_caja_valida,n_cajas_totales,n_cajas_validas,incluida,class_index,motivo_exclusion,release_tag,annotations_md5
+1,person,421,420,816,812,True,0,,proyecto2 v1.1.0@dc9376e,72e5f4025c4dbe7eb1e2420a9b4dbf9a
+2,car,399,399,539,537,True,1,,proyecto2 v1.1.0@dc9376e,72e5f4025c4dbe7eb1e2420a9b4dbf9a
+3,dog,71,71,99,99,False,,71 imágenes con caja válida (< 300),proyecto2 v1.1.0@dc9376e,72e5f4025c4dbe7eb1e2420a9b4dbf9a
