@@ -1,3 +1,6 @@
 pillow
 pytest
 ruff
+imagehash==4.3.2
+scikit-learn==1.8.0
+numpy

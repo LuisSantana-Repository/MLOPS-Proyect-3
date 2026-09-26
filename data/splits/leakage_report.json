@@ -1,0 +1,23 @@
+{
+  "semilla": 42,
+  "phash_umbral": 5,
+  "proporciones": {
+    "train": 0.7,
+    "val": 0.2,
+    "test": 0.1
+  },
+  "metodo": "StratifiedGroupKFold(n_splits=10, shuffle=True)",
+  "crops_csv_md5": "334188ddc6a4091c7976c7472229c612",
+  "n_recortes": 1349,
+  "n_imagenes": 640,
+  "n_grupos": 640,
+  "pares_duplicados_cercanos": [],
+  "fuga": {
+    "grupos_en_varios_splits": [],
+    "imagenes_en_varios_splits": [],
+    "duplicados_cercanos_entre_splits": [],
+    "total": 0
+  },
+  "test_huella_sha256": "2da093177e6ad54ec90b91a472b3f43e15d32b143abd0bff87e908e55a7e5fe8",
+  "test_custodia": "Alejandra"
+}

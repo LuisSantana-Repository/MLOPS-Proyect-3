@@ -87,9 +87,7 @@ class InputError(Exception):
 # ---------------------------------------------------------------------------
 
 
-def validate_box(
-    bbox: Any, img_w: float, img_h: float, min_area: float, tol: float = 1e-6
-) -> str | None:
+def validate_box(bbox: Any, img_w: float, img_h: float, min_area: float, tol: float = 1e-6) -> str | None:
     """Devuelve None si la caja COCO [x, y, w, h] es válida, o el motivo de descarte."""
     if not isinstance(bbox, list | tuple) or len(bbox) != 4:
         return R_MALFORMED
@@ -129,14 +127,8 @@ def classify_annotations(
         elif skip_crowd and ann.get("iscrowd", 0) == 1:
             reason = R_CROWD
         else:
-            reason = validate_box(
-                ann.get("bbox"), img["width"], img["height"], min_area
-            )
-            if (
-                reason is None
-                and images_dir is not None
-                and not (images_dir / img["file_name"]).is_file()
-            ):
+            reason = validate_box(ann.get("bbox"), img["width"], img["height"], min_area)
+            if reason is None and images_dir is not None and not (images_dir / img["file_name"]).is_file():
                 reason = R_MISSING_FILE
 
         if reason is None:
@@ -182,9 +174,7 @@ def compute_class_stats(coco: dict, valid: list[dict], min_images: int) -> list[
                 "n_cajas_validas": boxes_valid[cid],
                 "incluida": included,
                 "class_index": next_index if included else "",
-                "motivo_exclusion": ""
-                if included
-                else f"{n_valid_imgs} imágenes con caja válida (< {min_images})",
+                "motivo_exclusion": "" if included else f"{n_valid_imgs} imágenes con caja válida (< {min_images})",
             }
         )
         if included:
@@ -239,9 +229,7 @@ def write_crops(
                 im = im.convert("RGB")
                 for ann in by_image[image_id]:
                     name = f"{image_id}_{ann['id']}.jpg"
-                    crop_box(im, ann["bbox"]).save(
-                        crops_dir / name, quality=JPEG_QUALITY
-                    )
+                    crop_box(im, ann["bbox"]).save(crops_dir / name, quality=JPEG_QUALITY)
                     stat = included[ann["category_id"]]
                     rows.append(
                         {
@@ -254,9 +242,7 @@ def write_crops(
                         }
                     )
         except OSError as exc:
-            errors.extend(
-                (ann, f"imagen_ilegible: {exc}") for ann in by_image[image_id]
-            )
+            errors.extend((ann, f"imagen_ilegible: {exc}") for ann in by_image[image_id])
     rows.sort(key=lambda r: r["ann_id"])
     return rows, errors
 
@@ -288,9 +274,7 @@ def git_commit(path: Path) -> str | None:
         return None
 
 
-def build_release_info(
-    annotations: Path, release_tag: str, dvc_file: Path | None
-) -> dict[str, Any]:
+def build_release_info(annotations: Path, release_tag: str, dvc_file: Path | None) -> dict[str, Any]:
     info: dict[str, Any] = {
         "release_tag": release_tag,
         "annotations_path": annotations.as_posix(),
@@ -333,9 +317,7 @@ def _write_csv(path: Path, fields: list[str], rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def print_report(
-    stats: list[dict], rejected: list[tuple[dict, str]], info: dict
-) -> None:
+def print_report(stats: list[dict], rejected: list[tuple[dict, str]], info: dict) -> None:
     print(f"Release: {info['release_tag']}  annotations md5: {info['annotations_md5']}")
     print("\nConteos por clase")
     header = f"{'idx':>4}  {'clase':<24}{'imgs orig':>10}{'imgs válidas':>14}{'cajas válidas':>15}"
@@ -370,9 +352,7 @@ def run(args: argparse.Namespace) -> None:
     crops_dir = out_dir / "crops"
     if crops_dir.exists() and any(crops_dir.iterdir()):
         if not args.overwrite:
-            raise InputError(
-                f"{crops_dir} ya tiene archivos; usa --overwrite para regenerar"
-            )
+            raise InputError(f"{crops_dir} ya tiene archivos; usa --overwrite para regenerar")
         shutil.rmtree(crops_dir)
     if not args.images_dir.is_dir():
         raise InputError(f"No existe la carpeta de imágenes: {args.images_dir}")
@@ -380,9 +360,7 @@ def run(args: argparse.Namespace) -> None:
     coco = load_coco(args.annotations)
     info = build_release_info(args.annotations, args.release_tag, args.dvc_file)
 
-    valid, rejected = classify_annotations(
-        coco, args.min_area, args.images_dir, skip_crowd=not args.keep_crowd
-    )
+    valid, rejected = classify_annotations(coco, args.min_area, args.images_dir, skip_crowd=not args.keep_crowd)
     stats = compute_class_stats(coco, valid, args.min_images)
     rows, crop_errors = write_crops(coco, valid, stats, args.images_dir, out_dir)
     rejected += crop_errors
@@ -406,9 +384,7 @@ def run(args: argparse.Namespace) -> None:
             "min_images": args.min_images,
             "descartar_iscrowd": not args.keep_crowd,
         },
-        "cajas_descartadas": {
-            k: {"n": len(v), "ann_ids": v} for k, v in by_reason.items()
-        },
+        "cajas_descartadas": {k: {"n": len(v), "ann_ids": v} for k, v in by_reason.items()},
         "clases_excluidas": [
             {
                 "category_id": r["category_id"],
@@ -422,9 +398,7 @@ def run(args: argparse.Namespace) -> None:
     (out_dir / "exclusions.json").write_text(
         json.dumps(exclusions, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    (out_dir / "release_info.json").write_text(
-        json.dumps(info, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    (out_dir / "release_info.json").write_text(json.dumps(info, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print_report(stats, rejected, info)
     print(f"\n{len(rows)} recortes escritos en {crops_dir}")
 
@@ -434,12 +408,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--annotations", type=Path, required=True)
     p.add_argument("--images-dir", type=Path, required=True)
     p.add_argument("--out-dir", type=Path, required=True)
-    p.add_argument(
-        "--release-tag", required=True, help="Tag git/DVC del release aprobado"
-    )
-    p.add_argument(
-        "--dvc-file", type=Path, default=None, help="Archivo .dvc del release"
-    )
+    p.add_argument("--release-tag", required=True, help="Tag git/DVC del release aprobado")
+    p.add_argument("--dvc-file", type=Path, default=None, help="Archivo .dvc del release")
     p.add_argument("--min-area", type=float, default=DEFAULT_MIN_AREA)
     p.add_argument("--min-images", type=int, default=DEFAULT_MIN_IMAGES)
     p.add_argument("--keep-crowd", action="store_true", help="No descartar iscrowd=1")
@@ -456,9 +426,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     except KeyError as exc:
-        print(
-            f"ERROR: estructura COCO incompleta, falta la llave {exc}", file=sys.stderr
-        )
+        print(f"ERROR: estructura COCO incompleta, falta la llave {exc}", file=sys.stderr)
         return 2
     return 0
 

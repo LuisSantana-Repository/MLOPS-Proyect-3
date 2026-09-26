@@ -165,11 +165,7 @@ def test_elegibilidad_y_mapa_contiguo(dataset):
 def test_elegibilidad_usa_cajas_validas_no_originales(dataset):
     coco = _coco()
     valid, _ = mc.classify_annotations(coco, 100, dataset["images_dir"])
-    bird = next(
-        r
-        for r in mc.compute_class_stats(coco, valid, 2)
-        if r["category_name"] == "bird"
-    )
+    bird = next(r for r in mc.compute_class_stats(coco, valid, 2) if r["category_name"] == "bird")
     assert bird["n_imagenes_originales"] == 2
     assert bird["n_imagenes_con_caja_valida"] == 0
     assert not bird["incluida"]

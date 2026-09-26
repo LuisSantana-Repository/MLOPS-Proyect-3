@@ -1,0 +1,4 @@
+clase,total,train,train_pct,val,val_pct,test,test_pct
+car,537,375,69.8,108,20.1,54,10.1
+person,812,569,70.1,162,20.0,81,10.0
+TOTAL,1349,944,70.0,270,20.0,135,10.0
