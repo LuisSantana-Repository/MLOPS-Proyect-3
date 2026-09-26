@@ -31,7 +31,9 @@ def _write_dataset(root: Path) -> dict:
     coco_images = []
     for i in range(1, N_DISTINCT + 1):
         _noise_image(i).save(images_dir / f"{i}.png")
-        coco_images.append({"id": i, "file_name": f"{i}.png", "width": 128, "height": 128})
+        coco_images.append(
+            {"id": i, "file_name": f"{i}.png", "width": 128, "height": 128}
+        )
     dup = _noise_image(1).resize((120, 120)).point(lambda v: min(255, v + 8))
     dup.save(images_dir / "41.png")
     dup.resize((110, 110)).save(images_dir / "42.png")
@@ -62,7 +64,11 @@ def _write_dataset(root: Path) -> dict:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    return {"crops_csv": crops_csv, "annotations": annotations, "images_dir": images_dir}
+    return {
+        "crops_csv": crops_csv,
+        "annotations": annotations,
+        "images_dir": images_dir,
+    }
 
 
 @pytest.fixture
@@ -86,7 +92,9 @@ def _read_manifest(out_dir: Path) -> list[dict]:
 
 
 def _ids_by_split(manifest: list[dict]) -> dict[str, list[str]]:
-    return {s: sorted(r["ann_id"] for r in manifest if r["split"] == s) for s in ms.SPLITS}
+    return {
+        s: sorted(r["ann_id"] for r in manifest if r["split"] == s) for s in ms.SPLITS
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +121,9 @@ def test_grupos_son_transitivos_y_estables():
 
 def test_detecta_la_cadena_de_duplicados(dataset):
     paths = {i: dataset["images_dir"] / f"{i}.png" for i in DUP_CHAIN + (2, 3)}
-    pairs = ms.near_duplicate_pairs(ms.compute_phashes(paths), ms.DEFAULT_PHASH_THRESHOLD)
+    pairs = ms.near_duplicate_pairs(
+        ms.compute_phashes(paths), ms.DEFAULT_PHASH_THRESHOLD
+    )
     groups = ms.build_groups(set(paths), pairs)
     assert groups[1] == groups[41] == groups[42]
     assert groups[2] != groups[1] and groups[3] != groups[1]
@@ -141,7 +151,9 @@ def test_fuga_cero(dataset, tmp_path):
 def test_duplicados_cercanos_viajan_juntos(dataset, tmp_path):
     out = tmp_path / "out"
     assert ms.main(_argv(dataset, out)) == 0
-    por_imagen = {int(r["image_id"]): (r["group_id"], r["split"]) for r in _read_manifest(out)}
+    por_imagen = {
+        int(r["image_id"]): (r["group_id"], r["split"]) for r in _read_manifest(out)
+    }
     assert por_imagen[1] == por_imagen[41] == por_imagen[42]
 
 
@@ -157,7 +169,10 @@ def test_otra_semilla_cambia_el_test(dataset, tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     assert ms.main(_argv(dataset, a, "--seed", "1")) == 0
     assert ms.main(_argv(dataset, b, "--seed", "2")) == 0
-    assert _ids_by_split(_read_manifest(a))["test"] != _ids_by_split(_read_manifest(b))["test"]
+    assert (
+        _ids_by_split(_read_manifest(a))["test"]
+        != _ids_by_split(_read_manifest(b))["test"]
+    )
 
 
 def test_proporciones_aproximadas(dataset, tmp_path):
@@ -191,9 +206,15 @@ def test_find_leakage_detecta_fuga_inyectada():
 
 def test_main_sale_con_3_si_hay_fuga(dataset, tmp_path, monkeypatch, capsys):
     # Sin unir duplicados y mandando la 1 a train y la 41 a test, debe haber fuga.
-    monkeypatch.setattr(ms, "build_groups", lambda ids, pairs: {i: f"img{i:06d}" for i in ids})
     monkeypatch.setattr(
-        ms, "assign_splits", lambda rows, g, seed: {v: "test" if v == "img000041" else "train" for v in g.values()}
+        ms, "build_groups", lambda ids, pairs: {i: f"img{i:06d}" for i in ids}
+    )
+    monkeypatch.setattr(
+        ms,
+        "assign_splits",
+        lambda rows, g, seed: {
+            v: "test" if v == "img000041" else "train" for v in g.values()
+        },
     )
     assert ms.main(_argv(dataset, tmp_path / "out")) == 3
     assert "fuga" in capsys.readouterr().err
@@ -203,7 +224,9 @@ def test_huella_del_test_cambia_con_un_recorte():
     base = [{"ann_id": 1, "split": "test"}, {"ann_id": 2, "split": "train"}]
     otro = [{"ann_id": 1, "split": "test"}, {"ann_id": 2, "split": "test"}]
     assert ms.fingerprint_test_split(base) != ms.fingerprint_test_split(otro)
-    assert ms.fingerprint_test_split(base) == ms.fingerprint_test_split(list(reversed(base)))
+    assert ms.fingerprint_test_split(base) == ms.fingerprint_test_split(
+        list(reversed(base))
+    )
 
 
 # ---------------------------------------------------------------------------
