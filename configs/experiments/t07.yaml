@@ -1,0 +1,65 @@
+# T07 — 10 experimentos comparables sobre el mismo manifiesto y las mismas clases.
+#
+# Diseño: una línea base (exp-01) y variaciones controladas que cambian un factor
+# a la vez (o un par que tiene sentido mover juntos, anotado en la pregunta).
+# Las semillas y los datos son los mismos en todas las corridas, así que las
+# diferencias se deben a los hiperparámetros.
+#
+# Criterio de selección, fijado ANTES de correr (acuerdo del kickoff):
+#   menor best_val_loss (pérdida de validación en la mejor época);
+#   empate -> mayor best_val_acc -> corrida que inició primero.
+# El split test no participa en nada de esto.
+#
+# Lanzar:   python -m trainer.sweep run configs/experiments/t07.yaml
+# Reporte:  python -m trainer.sweep report configs/experiments/t07.yaml
+
+sweep: t07
+base_config: configs/baseline.yaml
+output_dir: runs/t07
+selection:
+  metric: best_val_loss
+  mode: min
+  tie_breakers: [best_val_acc:max, start_time:min]
+
+experiments:
+  - id: exp-01
+    question: "Línea base: AdamW, lr 1e-3, batch 32, 224 px, cabeza [256], dropout 0.3, layer4 entrenable."
+    overrides: {}
+
+  - id: exp-02
+    question: "¿SGD con momentum iguala a AdamW? SGD necesita un lr mayor, por eso lr=1e-2."
+    overrides: {optimizer: sgd, lr: 0.01}
+
+  # Nota: con weight_decay=0 (la base) Adam y AdamW son idénticos; un primer exp-03 con
+  # optimizer=adam repetía exp-01 época por época y se detuvo (run KILLED en MLflow).
+  - id: exp-03
+    question: "¿Weight decay desacoplado (AdamW, 0.01) regulariza mejor que la base sin decay?"
+    overrides: {weight_decay: 0.01}
+
+  - id: exp-04
+    question: "¿Un lr 3x menor, con más margen de épocas (45) para converger, generaliza mejor?"
+    overrides: {lr: 0.0003, max_epochs: 45}
+
+  - id: exp-05
+    question: "¿Batch 16 (más pasos y más ruido por época) mejora la validación?"
+    overrides: {batch_size: 16}
+
+  - id: exp-06
+    question: "¿Batch 64 (menos pasos, gradiente más estable) empeora o acelera?"
+    overrides: {batch_size: 64}
+
+  - id: exp-07
+    question: "¿Imágenes de 160 px bastan? Recortes más baratos de entrenar e inferir."
+    overrides: {img_size: 160}
+
+  - id: exp-08
+    question: "¿Imágenes de 288 px aportan detalle útil a pesar del costo?"
+    overrides: {img_size: 288}
+
+  - id: exp-09
+    question: "¿Una cabeza lineal sin capa oculta ni dropout es suficiente sobre features de ResNet18?"
+    overrides: {hidden_layers: [], dropout: 0.0}
+
+  - id: exp-10
+    question: "¿Una cabeza más profunda [512, 128] con dropout 0.5 regulariza mejor?"
+    overrides: {hidden_layers: [512, 128], dropout: 0.5}
