@@ -9,6 +9,12 @@ pillow==12.3.0
 pydantic==2.13.5
 PyYAML==6.0.3
 
+# Tracking (T06). skinny = cliente sin dependencias de servidor; misma versión que el servidor MLflow.
+mlflow-skinny==2.11.1
+matplotlib==3.11.2
+setuptools==78.1.0  # mlflow 2.11 importa pkg_resources
+boto3==1.43.75  # sube artefactos al artifact store s3:// (MinIO del stack); compatible con dvc-s3
+
 # Desarrollo
 pytest==9.1.1
 ruff==0.16.9

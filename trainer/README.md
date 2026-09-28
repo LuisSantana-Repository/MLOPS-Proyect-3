@@ -40,6 +40,82 @@ result = train(cfg, on_epoch_end=lambda row: print(row))  # row = métricas de l
 `on_epoch_end` recibe cada fila de `history.json` apenas termina la época; ahí se
 conectan `mlflow.log_metrics(..., step=row["epoch"])` (T06) y el progreso del job (T09).
 
+## Registro en MLflow (T06)
+
+```bash
+# Destino: MLFLOW_TRACKING_URI (p. ej. http://localhost:5000 del stack); si no existe, ./mlruns
+set MLFLOW_TRACKING_URI=http://localhost:5000
+
+# Corrida registrada en el experimento proyecto3-clasificador
+python -m trainer.tracking run --config configs/baseline.yaml --run-name baseline
+
+# Humo registrado (datos sintéticos, 2 épocas; queda con tag smoke=true)
+python -m trainer.tracking run --smoke
+
+# Reproducibilidad: dos corridas con la misma config y semillas deben dar
+# mismos parámetros, datos, métricas por época y SHA-256 de pesos (exit 0)
+python -m trainer.tracking compare <run_id_a> <run_id_b>
+```
+
+Desde Python (worker de T01/T09, barrido de T07):
+
+```python
+from trainer import load_config
+from trainer.tracking import run_tracked
+
+tracked = run_tracked(load_config("configs/baseline.yaml"), run_name="exp-01", tags={"job_id": "123"})
+tracked.run_id  # el paquete queda en <output_dir>/<run_id>
+```
+
+Antes de crear el run se verifica que `manifest.csv` coincida con el md5 de
+`manifest.csv.dvc`; si no, falla y pide `dvc pull`. Un error durante el
+entrenamiento deja el run en estado `FAILED` con el tag `error`.
+
+Contenido de cada run:
+
+| Tipo | Claves |
+|---|---|
+| Params | Todos los campos de la config (`hidden_layers` como JSON) |
+| Métricas por época (`step` = época) | `train_loss`, `train_acc`, `val_loss`, `val_acc`, `epoch_seconds` |
+| Métricas finales | `best_val_loss`, `best_val_acc`, `best_epoch`, `stopped_epoch`, `duration_seconds`, `train_samples`, `val_samples` |
+| Tags de datos | `dvc_release`, `release_annotations_md5` (de `release_info.json` de T03), `manifest_sha256`, `manifest_md5`, `manifest_dvc_md5`, `crops_dvc_md5` |
+| Tags de código y entorno | `git_commit`, `git_dirty`, `python_version`, `torch_version`, … , `device` |
+| Tags del modelo | `classes`, `num_classes`, `stop_reason`, `restored_matches_best_epoch`, `weights_sha256`, `pretrained_weights` |
+| Artefactos (raíz del run) | Paquete completo de abajo + `curves.png` |
+
+Para comparar corridas (T07) usa `best_val_loss`/`best_val_acc`, no el último
+valor de `val_loss`, que corresponde a la última época entrenada. Filtra
+`status = FINISHED`, sin tag `smoke`, y el mismo `manifest_sha256`.
+
+En un contenedor sin `.git`, `git_commit` se toma de la variable `GIT_COMMIT`.
+Si el árbol tiene cambios sin commit (`git_dirty=true`), el run guarda
+`source/source_diff.patch` y el tag `source_diff_sha256`: `git apply` del parche
+sobre `git_commit` reconstruye el código exacto de la corrida.
+
+## Experimentos y selección del candidato (T07)
+
+Los 10 experimentos están en [`configs/experiments/t07.yaml`](../configs/experiments/t07.yaml):
+una línea base y variaciones controladas, cada una con la pregunta que responde, y el
+criterio de selección fijado antes de correr (menor `best_val_loss` en validación).
+
+```bash
+# Valida diseño (10 configs válidas, sin duplicados, 7 parámetros con >= 2 valores) sin entrenar
+python -m trainer.sweep run configs/experiments/t07.yaml --dry-run
+
+# Corre los pendientes en secuencia; los ya terminados se omiten (se puede reanudar)
+python -m trainer.sweep run configs/experiments/t07.yaml
+
+# Tabla comparativa + candidato congelado en reports/t07/selection.json
+python -m trainer.sweep report configs/experiments/t07.yaml
+```
+
+`report` solo considera runs `FINISHED`, sin tag `smoke`, uno por experimento, y exige
+el mismo `manifest_sha256` y clases en todos. Escribe `experiments.md`,
+`experiments.csv` y `selection.json` (run ID, SHA-256 de `weights.pt`, criterio,
+fecha). Una vez congelada, la selección no cambia de candidato sin `--force`; en
+MLflow el ganador queda con `candidate=true` y `selected_at`. **T08 debe evaluar el
+test solo con el run de `selection.json`.**
+
 ## Configuración
 
 Esquema en [`trainer/config.py`](config.py); JSON Schema exportado en
