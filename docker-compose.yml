@@ -20,7 +20,7 @@ services:
 
   minio:
     # Se fijó la versión de MinIO (Corrección T01)
-    image: quay.io/minio/minio:RELEASE.2023-09-04T19-57-37Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: always
     ports:
       - "9000:9000"
