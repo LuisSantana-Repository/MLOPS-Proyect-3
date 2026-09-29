@@ -28,3 +28,7 @@ __pycache__/
 
 # Artefactos de prueba
 dummy_artifact.txt
+
+# T10: temporales de tests y caché de modelos del servicio de inferencia
+.pytest-tmp/
+model-cache/

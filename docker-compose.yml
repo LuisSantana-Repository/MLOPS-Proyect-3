@@ -92,15 +92,57 @@ services:
     restart: always
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      # Credenciales de MinIO para el artifact store de MLflow (AWS_* = MinIO).
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
       REDIS_HOST: redis
+      # Bucket de modelos de T10 (AWS S3 real) con credenciales dedicadas.
+      MODELS_S3_BUCKET: ${S3_BUCKET}
+      MODELS_AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      MODELS_AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # Acceso a MariaDB para escribir/leer model_versions.
+      MYSQL_HOST: db
+      MYSQL_PORT: "3306"
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
     depends_on:
       redis:
         condition: service_started
       mlflow:
         # El worker ahora espera a que mlflow esté saludable (Corrección T01)
+        condition: service_healthy
+
+  # Servicio de inferencia de T10: reusa la imagen del worker y sirve POST /predict.
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: always
+    command: ["uvicorn", "serving.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODELS_S3_BUCKET: ${S3_BUCKET}
+      MODELS_AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      MODELS_AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      MYSQL_HOST: db
+      MYSQL_PORT: "3306"
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MODEL_CACHE_DIR: /tmp/model-cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+      mlflow:
         condition: service_healthy
 
 volumes:

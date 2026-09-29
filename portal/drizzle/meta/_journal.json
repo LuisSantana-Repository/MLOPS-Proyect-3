@@ -8,6 +8,13 @@
       "when": 1790616162889,
       "tag": "0000_steady_speed",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1790695040284,
+      "tag": "0001_goofy_miss_america",
+      "breakpoints": true
     }
   ]
 }

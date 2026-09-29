@@ -1,0 +1,13 @@
+# Normaliza finales de línea a LF en el repo para que Biome/ruff/CI sean
+# deterministas en Windows y Linux (evita que autocrlf marque falsos cambios).
+* text=auto eol=lf
+
+# Binarios: nunca tocar finales de línea.
+*.pt binary
+*.pth binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.exe binary
