@@ -1,6 +1,9 @@
 import csv
 import hashlib
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import evaluate_final as ev
@@ -240,6 +243,20 @@ def test_metricas_en_mlflow_son_recalculables(env):
     assert "test/confusion_matrix.png" in artifacts
 
 
+def test_reportes_llevan_el_run_id_y_los_hashes(env):
+    assert ev.main(_argv(env, "--package-dir", str(env["package"]))) == 0
+    metrics = json.loads((env["out_dir"] / "metrics.json").read_text())
+    tags = env["client"].get_run(env["run_id"]).data.tags
+
+    # Sin MLflow, la carpeta reports/t08 sola debe decir de qué run y qué datos viene.
+    assert metrics["run_id"] == env["run_id"]
+    assert metrics["manifest_sha256"] == ev.sha256_file(env["manifest"]) == tags["test_manifest_sha256"]
+    assert metrics["weights_sha256"] == ev.sha256_file(env["package"] / "weights.pt") == tags["test_weights_sha256"]
+    assert metrics["test_ids_fingerprint"] == tags["test_ids_fingerprint"]
+    assert metrics["evaluated_at"] == tags["test_evaluated_at"]
+    assert metrics["accuracy"] == pytest.approx(11 / 12)  # las métricas siguen ahí
+
+
 def test_descarga_el_modelo_del_run(env):
     assert ev.main(_argv(env)) == 0  # sin --package-dir: baja weights.pt del run
 
@@ -302,6 +319,26 @@ def test_nada_se_registra_si_falla_una_verificacion(env):
     run = env["client"].get_run(env["run_id"])
     assert not [k for k in run.data.metrics if k.startswith("test_")]
     assert not (env["out_dir"] / "predictions.csv").exists()
+
+
+# ---------------------------------------------------------------------------
+# El comando documentado funciona sin PYTHONPATH
+# ---------------------------------------------------------------------------
+
+
+def test_script_encuentra_trainer_sin_pythonpath(tmp_path):
+    # `python ml/evaluate_final.py` pone ml/ en sys.path, no la raíz del repo.
+    # Se simula igual: se ejecuta el archivo desde otra carpeta y sin PYTHONPATH.
+    script = Path(ev.__file__).resolve()
+    code = (
+        "import importlib.util, runpy; "
+        f"runpy.run_path({str(script)!r}, run_name='evaluate_final'); "
+        "print(importlib.util.find_spec('trainer') is not None)"
+    )
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    out = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "True"
 
 
 # ---------------------------------------------------------------------------
