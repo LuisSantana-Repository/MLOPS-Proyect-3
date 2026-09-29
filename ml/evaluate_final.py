@@ -13,7 +13,7 @@ Antes de inferir verifica, y se detiene si algo no cuadra:
 
 Salidas en --out-dir (por defecto reports/t08):
     predictions.csv            una fila por recorte: y_true, y_pred y probabilidad por clase
-    metrics.json               recalculadas a partir de predictions.csv
+    metrics.json               run_id, hashes verificados y métricas recalculadas de predictions.csv
     classification_report.json precisión, recall, F1 y soporte por clase
     confusion_matrix.json/png  filas = clase real, columnas = clase predicha
 
@@ -41,6 +41,13 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
+
+# `python ml/evaluate_final.py` agrega ml/ a sys.path, no la raíz del repo, y
+# `trainer` no está instalado como paquete. Se agrega la raíz para que
+# `from trainer import load_model` funcione sin PYTHONPATH.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 TARGET_ACCURACY = 0.85
 PACKAGE_FILES = ("weights.pt", "classes.json", "preprocess.json")
@@ -298,11 +305,14 @@ def save_confusion_png(cm: dict, path: Path) -> None:
     plt.close(fig)
 
 
-def write_outputs(out_dir: Path, metrics: dict[str, Any]) -> None:
+def write_outputs(out_dir: Path, metrics: dict[str, Any], provenance: dict[str, str]) -> None:
+    """Escribe los reportes. `provenance` liga la carpeta al run y a los datos sin depender de MLflow."""
+
     def dump(name: str, data: Any) -> None:
         (out_dir / name).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    dump("metrics.json", {k: v for k, v in metrics.items() if k not in ("per_class", "confusion_matrix")})
+    summary = {k: v for k, v in metrics.items() if k not in ("per_class", "confusion_matrix")}
+    dump("metrics.json", {**provenance, **summary})
     dump("classification_report.json", metrics["per_class"])
     dump("confusion_matrix.json", metrics["confusion_matrix"])
     save_confusion_png(metrics["confusion_matrix"], out_dir / "confusion_matrix.png")
@@ -384,10 +394,18 @@ def run(args: argparse.Namespace) -> int:
     predictions = args.out_dir / "predictions.csv"
     write_predictions(predictions, rows, probs, classes)
     metrics = metrics_from_predictions(predictions, classes)
-    write_outputs(args.out_dir, metrics)
+
+    provenance = {
+        "run_id": args.run_id,
+        "evaluated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "manifest_sha256": manifest_sha,
+        "weights_sha256": weights_sha,
+        "test_ids_fingerprint": fingerprint,
+    }
+    write_outputs(args.out_dir, metrics, provenance)
 
     tags = {
-        "test_evaluated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "test_evaluated_at": provenance["evaluated_at"],
         "test_manifest_sha256": manifest_sha,
         "test_ids_fingerprint": fingerprint,
         "test_weights_sha256": weights_sha,
