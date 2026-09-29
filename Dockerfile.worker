@@ -2,12 +2,23 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar dependencias del worker
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
-# CORRECCIÓN: Fijar la versión exacta de mlflow para que coincida con el servidor
-RUN pip install --no-cache-dir mlflow==2.11.1 boto3 redis pandas
+# Git es necesario para la procedencia (trainer/tracking.py usa git); curl para healthchecks.
+RUN apt-get update && apt-get install -y --no-install-recommends git curl \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY worker.py .
+# Dependencias del entrenador + servicio (torch/torchvision CPU, mlflow-skinny,
+# boto3, fastapi, uvicorn, pymysql). Se instala primero para aprovechar la caché.
+COPY requirements-trainer.txt requirements-serving.txt ./
+RUN pip install --no-cache-dir -r requirements-serving.txt \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir redis==5.2.1
 
-# Ejecutar sin búfer para ver logs en tiempo real
+# Código: el paquete del entrenador, el de serving, las configs y el worker de cola.
+COPY trainer/ ./trainer/
+COPY serving/ ./serving/
+COPY configs/ ./configs/
+COPY worker.py publish_model.py ./
+
+# El comando por defecto es el worker de cola; el servicio de inferencia se arranca
+# con `uvicorn serving.app:app` (ver el servicio `inference` en docker-compose.yml).
 CMD ["python", "-u", "worker.py"]

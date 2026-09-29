@@ -1,0 +1,9 @@
+# Dependencias del servicio de publicación e inferencia (T10). Python 3.11.
+# Reusa el entorno del entrenador (torch, torchvision, mlflow-skinny, boto3) y añade
+# el servicio web y el driver de MariaDB.
+-r requirements-trainer.txt
+
+fastapi==0.121.2
+uvicorn==0.38.0
+python-multipart==0.0.20  # FastAPI UploadFile/Form
+PyMySQL==1.1.2            # inserta/lee model_versions en MariaDB
