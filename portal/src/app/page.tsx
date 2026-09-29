@@ -1,8 +1,18 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem" }}>
+    <main className="container">
       <h1>Portal MLOps — Proyecto 3</h1>
-      <p>API de entrenamiento, experimentos, evaluación y modelos. Ver /api/*.</p>
+      <ul>
+        <li>
+          <Link href="/training">Training</Link>: elegir release, configurar parámetros y lanzar un
+          job.
+        </li>
+        <li>
+          <Link href="/experiments">Experiments</Link>: comparar runs, ver curvas y el candidato.
+        </li>
+      </ul>
     </main>
   );
 }

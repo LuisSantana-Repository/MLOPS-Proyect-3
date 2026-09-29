@@ -3,6 +3,8 @@
  * requerido y no hay default razonable, con un mensaje claro.
  */
 
+import { resolve } from "node:path";
+
 function num(value: string | undefined, fallback: number): number {
   if (value === undefined || value.trim() === "") return fallback;
   const parsed = Number(value);
@@ -29,4 +31,8 @@ export const env = {
   REDIS_HOST: process.env.REDIS_HOST?.trim() || "127.0.0.1",
   REDIS_PORT: num(process.env.REDIS_PORT, 6379),
   ML_JOBS_QUEUE: process.env.ML_JOBS_QUEUE?.trim() || "ml_jobs",
+
+  // Raíz del repo, donde viven los artefactos versionados de T03/T04/T07.
+  // `npm run dev` corre dentro de portal/, así que por defecto es la carpeta padre.
+  REPO_ROOT: resolve(process.env.REPO_ROOT?.trim() || resolve(process.cwd(), "..")),
 } as const;

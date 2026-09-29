@@ -34,6 +34,8 @@ replican `trainer/config.py::TrainConfig`.
 | `GET` | `/api/experiments` | Runs del experimento (`?experiment=`, `?maxResults=`, `?pageToken=`) con parámetros y métricas finales, desde MLflow. |
 | `GET` | `/api/experiments/[runId]/metrics` | Historial por época; por defecto `train_loss` y `val_loss` (`?keys=train_acc,val_acc`). |
 | `GET` | `/api/evaluation/[modelVersion]` | Métricas de evaluación (test/eval), matriz de confusión y clases. Acepta `nombre:version` en la ruta o `?name=` + versión. |
+| `GET` | `/api/releases` | Releases DVC aprobados con procedencia (commit del Proyecto 2, md5 de anotaciones, recortes y manifiesto) y conteos 70/20/10 por clase. Lee los artefactos versionados de T03/T04 (T11). |
+| `GET` | `/api/experiments/selection` | Run candidato congelado por T07 (`reports/t07/selection.json`) (T11). |
 | `GET` | `/api/models` | Versiones del Model Registry: versión, run de origen, llave S3 (MinIO) y hash de pesos (`weights_sha256`). |
 
 Los errores siguen la forma `ApiErrorBody`:
@@ -44,6 +46,19 @@ Los errores siguen la forma `ApiErrorBody`:
 
 Códigos: `bad_request` (400), `not_found` (404), `upstream_error` (502, MLflow/Redis
 caídos), `internal_error` (500).
+
+## Páginas (T11)
+
+| Ruta | Qué hace |
+| --- | --- |
+| `/training` | Selector del release aprobado (hash, procedencia y split 70/20/10), formulario de los 7 hiperparámetros y 3 semillas validado con el mismo `createTrainingJobSchema` del backend, y panel de progreso que consulta `GET /api/training/jobs/[id]` cada 3 s hasta que el job termina. |
+| `/experiments` | Tabla ordenable de runs (parámetros, mejor `val_loss`, `val_acc`) con el candidato de T07 marcado con ★, y curvas train/val por época del run elegido. `?run=<runId>` abre ese run. Por defecto muestra todos los runs; el filtro "Solo runs de selección" aplica el de T07. |
+
+Sin datos simulados: cada vista tiene estados de carga, vacío y error (con reintento).
+Las gráficas son SVG propio (`src/lib/ui/chart.ts`), sin librería de gráficas.
+
+`REPO_ROOT` (opcional) indica la raíz del repo para `/api/releases`; por defecto es la
+carpeta padre de `portal/`.
 
 ## Ejemplo: lanzar un entrenamiento
 
