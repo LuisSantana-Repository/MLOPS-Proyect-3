@@ -74,11 +74,13 @@ class ModelCache:
 
     def _ensure_downloaded(self, version: str, expected_sha256: str | None) -> Path:
         package_dir = self.cache_dir / version
-        weights = package_dir / storage.CHECKPOINT_FILE
         settings = self.s3_settings()
         client = storage.make_s3_client(settings)
 
-        if not weights.is_file():
+        # Se re-descarga si falta CUALQUIER archivo del paquete, no solo weights.pt:
+        # una descarga previa interrumpida pudo dejar el paquete incompleto.
+        complete = all((package_dir / name).is_file() for name in storage.PACKAGE_FILES)
+        if not complete:
             log.info("descargando versión %s de s3://%s", version, settings.bucket)
             storage.download_package(client, settings.bucket, version, package_dir)
 
@@ -96,6 +98,10 @@ class ModelCache:
 
     def get(self, version: str, expected_sha256: str | None = None) -> LoadedModel:
         """Devuelve el modelo de una versión, descargándolo/cargándolo si hace falta."""
+        # Valida el formato de la versión ANTES de usarla en rutas o llaves S3.
+        # Rechaza cosas como "../../x" (path traversal): parse_semver solo acepta
+        # MAJOR.MINOR.PATCH y lanza StorageError en cualquier otro caso.
+        storage.parse_semver(version)
         with self._lock:
             if version in self._loaded:
                 return self._loaded[version]

@@ -50,6 +50,26 @@ def test_clean_download_and_predict(s3_bucket, trained_package, tmp_path: Path) 
     assert storage.sha256_file(downloaded) == sha256
 
 
+def test_recovers_from_half_downloaded_cache(s3_bucket, trained_package, tmp_path: Path) -> None:
+    client, settings = s3_bucket
+    sha256 = storage.sha256_file(trained_package / "weights.pt")
+    storage.upload_package(client, settings.bucket, trained_package, "1.0.0")
+
+    # Simula una descarga previa interrumpida: solo weights.pt quedó en la caché.
+    cache_dir = tmp_path / "cache"
+    partial = cache_dir / "1.0.0"
+    partial.mkdir(parents=True)
+    (partial / "weights.pt").write_bytes((trained_package / "weights.pt").read_bytes())
+    assert not (partial / "classes.json").exists()
+
+    cache = ModelCache(cache_dir=cache_dir, s3_settings=settings)
+    loaded = cache.get("1.0.0", expected_sha256=sha256)
+    assert loaded is not None
+    # Los archivos que faltaban se descargaron.
+    for name in storage.PACKAGE_FILES:
+        assert (partial / name).is_file(), name
+
+
 def test_predict_verifies_hash_from_argument(s3_bucket, trained_package, tmp_path: Path) -> None:
     client, settings = s3_bucket
     storage.upload_package(client, settings.bucket, trained_package, "1.0.0")
@@ -86,3 +106,11 @@ def test_missing_version_raises(s3_bucket, tmp_path: Path) -> None:
     cache = ModelCache(cache_dir=tmp_path / "cache", s3_settings=settings)
     with pytest.raises(ModelNotFoundError):
         cache.predict("9.9.9", _sample_image_bytes())
+
+
+@pytest.mark.parametrize("bad", ["../../etc/passwd", "..", "1.0", "latest", "1.0.0/../x", ""])
+def test_rejects_non_semver_version_path_traversal(tmp_path: Path, bad: str) -> None:
+    # Una versión no semver (p. ej. path traversal) se rechaza ANTES de tocar disco/S3.
+    cache = ModelCache(cache_dir=tmp_path / "cache")
+    with pytest.raises(StorageError):
+        cache.get(bad)
