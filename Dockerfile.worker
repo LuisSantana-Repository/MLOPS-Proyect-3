@@ -19,6 +19,11 @@ COPY serving/ ./serving/
 COPY configs/ ./configs/
 COPY worker.py publish_model.py ./
 
+# Commit del código para la procedencia de los runs (la imagen no incluye .git;
+# trainer.tracking.git_info usa GIT_COMMIT como respaldo).
+ARG GIT_COMMIT="no disponible"
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 # El comando por defecto es el worker de cola; el servicio de inferencia se arranca
 # con `uvicorn serving.app:app` (ver el servicio `inference` en docker-compose.yml).
 CMD ["python", "-u", "worker.py"]

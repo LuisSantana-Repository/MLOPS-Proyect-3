@@ -31,6 +31,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -209,11 +210,17 @@ def run_tracked(
     tags: dict[str, str] | None = None,
     release_info: Path | None = None,
     strict: bool = True,
+    on_start: Callable[[str], None] | None = None,
+    on_epoch: Callable[[dict[str, Any]], None] | None = None,
 ) -> TrackedRun:
     """Entrena con ``cfg`` dentro de un run de MLflow.
 
     El paquete se escribe en ``cfg.output_dir / <run_id>`` para que cada corrida tenga
     su propia carpeta y quede ligada a su run.
+
+    ``on_start(run_id)`` y ``on_epoch(fila)`` son avisos opcionales para quien lanza el
+    entrenamiento (p. ej. el worker del portal, que guarda el run_id y el progreso en
+    ``training_jobs``). Sin ellos, el comportamiento es el mismo de siempre.
     """
     uri = tracking_uri()
     mlflow.set_tracking_uri(uri)
@@ -232,11 +239,15 @@ def run_tracked(
                 patch_path.write_bytes(patch)
                 mlflow.log_artifact(str(patch_path), str(Path(SOURCE_PATCH_ARTIFACT).parent.as_posix()))
             mlflow.set_tag("source_diff_sha256", hashlib.sha256(patch).hexdigest())
+        if on_start is not None:
+            on_start(run_id)
 
         def log_epoch(row: dict[str, Any]) -> None:
             metrics = {key: row[key] for key in EPOCH_METRICS}
             metrics["epoch_seconds"] = row["seconds"]
             mlflow.log_metrics(metrics, step=row["epoch"])
+            if on_epoch is not None:
+                on_epoch(row)
 
         try:
             result = train(cfg, on_epoch_end=log_epoch)
