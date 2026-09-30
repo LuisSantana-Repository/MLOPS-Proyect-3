@@ -1,0 +1,11 @@
+# Dependencias solo para correr los tests del worker en CI (Python 3.11).
+# Reusa el entorno de serving (torch CPU, mlflow-skinny, boto3, fastapi, pymysql...)
+# y añade lo que los tests importan pero no está en los requirements de runtime.
+#
+#   pip install -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu
+#
+# tests/serving y tests/trainer usan un bucket S3 simulado con moto (mock_aws).
+-r requirements-serving.txt
+-r ml/requirements.txt
+
+moto[s3]>=5.0,<6   # S3 simulado (mock_aws) para tests de publicación/inferencia
