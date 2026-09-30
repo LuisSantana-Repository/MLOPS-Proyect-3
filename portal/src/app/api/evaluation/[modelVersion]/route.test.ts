@@ -8,10 +8,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getModelVersion = vi.fn();
 const getRun = vi.fn();
+const loadTestEvaluation = vi.fn();
 
 vi.mock("@/lib/mlflow", () => ({
   getModelVersion: (...a: unknown[]) => getModelVersion(...a),
   getRun: (...a: unknown[]) => getRun(...a),
+}));
+
+// T12: evaluación de test calculada desde predictions.csv de T08.
+vi.mock("@/lib/test-evaluation", () => ({
+  loadTestEvaluation: (...a: unknown[]) => loadTestEvaluation(...a),
 }));
 
 import { GET } from "./route";
@@ -27,6 +33,7 @@ beforeEach(() => {
     tags: { confusion_matrix: "[[40,5],[7,38]]", classes: '["person","car"]' },
     params: {},
   });
+  loadTestEvaluation.mockResolvedValue(null);
 });
 
 describe("GET /api/evaluation/[modelVersion]", () => {
@@ -66,5 +73,39 @@ describe("GET /api/evaluation/[modelVersion]", () => {
     getModelVersion.mockResolvedValue(null);
     const res = await GET(req(), ctx("clasificador:9"));
     expect(res.status).toBe(404);
+  });
+
+  it("T12: incluye la evaluación de test calculada desde predictions.csv del run", async () => {
+    const test = {
+      source: "mlflow",
+      accuracy: 0.9,
+      confusionMatrix: {
+        labels: ["person", "car"],
+        matrix: [
+          [9, 1],
+          [1, 9],
+        ],
+      },
+    };
+    getRun.mockResolvedValue({ metrics: { test_accuracy: 0.9 }, tags: {}, params: {} });
+    loadTestEvaluation.mockResolvedValue(test);
+    const body = await (await GET(req(), ctx("clasificador:3"))).json();
+    expect(loadTestEvaluation).toHaveBeenCalledWith("run-1", { test_accuracy: 0.9 });
+    expect(body.test).toEqual(test);
+    // Sin tags, la matriz y las clases salen de predictions.csv.
+    expect(body.confusionMatrix).toEqual(test.confusionMatrix.matrix);
+    expect(body.classes).toEqual(["person", "car"]);
+  });
+
+  it("T12: test = null si el run todavía no tiene evaluación de test", async () => {
+    const body = await (await GET(req(), ctx("clasificador:3"))).json();
+    expect(body.test).toBeNull();
+  });
+
+  it("T12: 502 si no se puede leer predictions.csv", async () => {
+    const { upstreamError } = await import("@/lib/http");
+    loadTestEvaluation.mockRejectedValue(upstreamError("MLflow caído"));
+    const res = await GET(req(), ctx("clasificador:3"));
+    expect(res.status).toBe(502);
   });
 });
