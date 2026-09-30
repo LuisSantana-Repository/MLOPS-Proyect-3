@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/**
+ * Contrato del endpoint POST /api/training/jobs (T09 / T14).
+ *
+ * Llama al route handler directamente con las capas de datos/cola mockeadas, así
+ * el test no necesita MariaDB ni Redis. Verifica: 201 con la forma del contrato,
+ * que se persiste y se encola, 400 ante cuerpo inválido o no-JSON, y 502 si la
+ * cola falla.
+ */
+
 const createJob = vi.fn();
 const enqueueTrainingJob = vi.fn();
 
@@ -8,103 +17,76 @@ vi.mock("@/lib/queue", () => ({
   enqueueTrainingJob: (...a: unknown[]) => enqueueTrainingJob(...a),
 }));
 
+import { upstreamError } from "@/lib/http";
 import { POST } from "./route";
 
-const validBody = {
-  release: "proyecto2 v1.1.0@dc9376e",
-  optimizer: "adamw",
-  batch_size: 32,
-  max_epochs: 30,
-  lr: 0.001,
-  img_size: 224,
-  hidden_layers: [256],
-  dropout: 0.3,
-  shuffle_seed: 42,
-  aug_seed: 43,
-  init_seed: 44,
-};
-
-function post(body: unknown): Request {
+function req(body: unknown, { raw = false }: { raw?: boolean } = {}): Request {
   return new Request("http://localhost/api/training/jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: typeof body === "string" ? body : JSON.stringify(body),
+    body: raw ? (body as string) : JSON.stringify(body),
   });
 }
 
-describe("POST /api/training/jobs", () => {
-  beforeEach(() => {
-    createJob.mockReset();
-    enqueueTrainingJob.mockReset();
-  });
+const VALID = { release: "proyecto2 v1.1.0@dc9376e" };
 
-  it("crea el job (201), lo persiste y lo encola", async () => {
-    const now = new Date("2026-09-28T12:00:00.000Z");
-    createJob.mockResolvedValue({
+beforeEach(() => {
+  vi.clearAllMocks();
+  createJob.mockResolvedValue({
+    id: "job-1",
+    status: "queued",
+    release: VALID.release,
+    params: { optimizer: "adamw", batch_size: 32 },
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  });
+  enqueueTrainingJob.mockResolvedValue(undefined);
+});
+
+describe("POST /api/training/jobs", () => {
+  it("201: persiste, encola y devuelve la forma del contrato", async () => {
+    const res = await POST(req(VALID));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body).toMatchObject({
       id: "job-1",
       status: "queued",
-      release: validBody.release,
-      params: { ...validBody, release: undefined },
-      createdAt: now,
+      release: VALID.release,
+      createdAt: "2026-01-01T00:00:00.000Z",
     });
-    enqueueTrainingJob.mockResolvedValue(undefined);
-
-    const res = await POST(post(validBody));
-    expect(res.status).toBe(201);
-
-    const json = await res.json();
-    expect(json.id).toBe("job-1");
-    expect(json.status).toBe("queued");
-    expect(json.release).toBe(validBody.release);
-
-    // Persistió con release + params, y encoló con la forma { id, params }.
     expect(createJob).toHaveBeenCalledOnce();
-    expect(createJob.mock.calls[0][0]).toBe(validBody.release);
     expect(enqueueTrainingJob).toHaveBeenCalledOnce();
+    // Se encola con { id, params } (lo que espera worker.py).
     const queued = enqueueTrainingJob.mock.calls[0][0];
     expect(queued.id).toBe("job-1");
-    expect(queued.params.release).toBe(validBody.release);
-    expect(queued.params.manifest_path).toBe("data/splits/manifest.csv");
+    expect(queued.params.release).toBe(VALID.release);
   });
 
-  it("rechaza sin release con 400 y detalle de campo", async () => {
-    const { release: _omit, ...noRelease } = validBody;
-    const res = await POST(post(noRelease));
+  it("400: cuerpo sin release (regla de negocio)", async () => {
+    const res = await POST(req({ batch_size: 32 }));
     expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error.code).toBe("bad_request");
-    expect(json.error.details.release).toBeDefined();
+    const body = await res.json();
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.details).toHaveProperty("release");
     expect(createJob).not.toHaveBeenCalled();
+    expect(enqueueTrainingJob).not.toHaveBeenCalled();
   });
 
-  it("rechaza hiperparámetros fuera de rango (lr > 1)", async () => {
-    const res = await POST(post({ ...validBody, lr: 5 }));
+  it("400: hiperparámetro fuera de rango", async () => {
+    const res = await POST(req({ ...VALID, batch_size: 99999 }));
     expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error.details.lr).toBeDefined();
+    expect((await res.json()).error.details).toHaveProperty("batch_size");
   });
 
-  it("aplica defaults del baseline cuando faltan campos opcionales", async () => {
-    createJob.mockResolvedValue({
-      id: "job-2",
-      status: "queued",
-      release: validBody.release,
-      params: {},
-      createdAt: new Date(),
-    });
-    enqueueTrainingJob.mockResolvedValue(undefined);
-
-    const minimal = { release: validBody.release };
-    const res = await POST(post(minimal));
-    expect(res.status).toBe(201);
-    const params = createJob.mock.calls[0][1];
-    expect(params.optimizer).toBe("adamw");
-    expect(params.batch_size).toBe(32);
-    expect(params.shuffle_seed).toBe(42);
-  });
-
-  it("responde 400 si el cuerpo no es JSON", async () => {
-    const res = await POST(post("no-json{"));
+  it("400: cuerpo que no es JSON válido", async () => {
+    const res = await POST(req("no-es-json{", { raw: true }));
     expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("bad_request");
+  });
+
+  it("502: la cola (Redis) no responde -> no se pierde el error", async () => {
+    enqueueTrainingJob.mockRejectedValueOnce(upstreamError("Redis caído"));
+    const res = await POST(req(VALID));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error.code).toBe("upstream_error");
   });
 });

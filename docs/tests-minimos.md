@@ -96,22 +96,26 @@ compilan/corren.
 |--------|--------|-------|
 | ✅ | Los rangos/enums/defaults de Zod del portal coinciden con `configs/train-config.schema.json` | `portal/src/contracts/training.schema.test.ts` |
 | ✅ | Contrato de `POST /predict` (FastAPI): forma de respuesta y errores | `tests/serving/test_app.py` |
-| ⚠️ | **Un test por endpoint del portal** (`/api/training/jobs`, `/api/experiments`, `/api/models`, `/api/evaluation/…`) como promete `portal/README.md` | *falta* — hoy solo hay test del contrato del schema, no de los route handlers |
+| ✅ | **Un test por endpoint del portal** (route handlers): 201/400/502, 404, filtros y forma de respuesta | `portal/src/app/api/**/route.test.ts` (training jobs POST y GET/[id], experiments, experiments/[runId]/metrics, models, evaluation/[modelVersion]) |
 
 ---
 
 ## Resumen de faltantes (priorizado)
 
-1. **Test por endpoint del portal** (Vitest sobre los route handlers) — es lo que
-   más "contratos de API" refuerza y hoy no existe.
+1. ✅ **Test por endpoint del portal** (Vitest sobre los route handlers) —
+   **hecho**: un archivo `route.test.ts` por endpoint, cubriendo respuesta,
+   validación (400), 404 y errores de upstream (502).
 2. **Gate de publicación "solo el candidato aprobado"** — endurecer `publish` para
    rechazar un run que no sea el de `selection.json` salvo `--force`, con su test.
+   (Hoy `publish` verifica el sha256 del run; el gate estricto por run_id es la
+   mejora pendiente.)
 3. **Guardián de fuga sobre el manifiesto versionado real** en CI (requiere
-   `dvc pull` o un manifiesto de muestra commiteado).
+   `dvc pull` o un manifiesto de muestra commiteado). La lógica ya está cubierta
+   por `ml/tests/test_make_split.py` sobre un dataset sintético.
 4. **Smoke end-to-end del README** con servicios (`docker compose`) que verifique
    `POST /api/training/jobs → 201`.
 5. **Linkcheck del README** (paso barato en CI).
 
-Los 4 requisitos críticos tienen cobertura de test **existente** para su núcleo;
-los faltantes de arriba los llevan de "cubierto en lo esencial" a "cubierto de
-punta a punta".
+Los 4 requisitos críticos tienen cobertura de test para su núcleo; el faltante #1
+(contratos de API del portal) quedó cerrado. Los faltantes #2–#5 son refuerzos de
+"punta a punta", no bloqueantes del pipeline de release.
