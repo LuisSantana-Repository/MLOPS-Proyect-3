@@ -1,0 +1,42 @@
+# Configuración de gitleaks para el escaneo de secretos del CI (T14 / T10).
+#
+# Objetivo: "escaneo de secretos sin hallazgos". Partimos del conjunto de reglas
+# por defecto de gitleaks y añadimos una allowlist acotada para las PLANTILLAS de
+# configuración versionadas a propósito (*.example, *.tfvars.example), que solo
+# contienen placeholders y valores dummy, no secretos reales.
+#
+# Regla de oro: NUNCA versionar .env reales ni credenciales. El .gitignore ya
+# ignora .env (real) y *.tfstate/*.tfvars; aquí solo silenciamos los ejemplos.
+
+# Hereda todas las reglas base de gitleaks (AWS, GCP, tokens, claves privadas...).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Plantillas de ejemplo con placeholders (no secretos reales)"
+
+# Archivos que son plantillas por diseño: valores de muestra, nunca reales.
+paths = [
+  '''\.env\.example$''',
+  '''\.env\.production\.example$''',
+  '''.*\.tfvars\.example$''',
+]
+
+# Valores dummy conocidos que aparecen en las plantillas y no deben marcarse.
+# (Coinciden con los placeholders de .env.example: root_secret, minio_secret, etc.)
+regexes = [
+  '''root_secret''',
+  '''minio_secret''',
+  '''mlflow_password''',
+  '''minio_admin''',
+  '''mlflow_user''',
+]
+
+# Marcadores genéricos de "rellena esto" que a veces disparan reglas.
+stopwords = [
+  "example",
+  "changeme",
+  "your-",
+  "placeholder",
+  "dummy",
+]

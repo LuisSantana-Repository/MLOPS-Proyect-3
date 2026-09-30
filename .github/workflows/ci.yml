@@ -1,0 +1,199 @@
+name: CI
+
+# Bloque Release (T14, depende de T10):
+#   - Biome (lint del portal)
+#   - Tests del portal (Vitest): contratos de API
+#   - Tests del worker (pytest): fuga del manifiesto, reproducibilidad por semilla
+#     con smoke train en CPU, y recarga del modelo publicado desde S3 + inferencia
+#   - Escaneo de secretos con gitleaks
+#
+# "Está listo cuando: CI en verde en main y un escaneo de secretos sin hallazgos."
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # PyTorch CPU: mismas versiones fijadas, índice de ruedas CPU (sin CUDA en CI).
+  PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Lint del portal con Biome
+  # ---------------------------------------------------------------------------
+  biome-lint:
+    name: Biome (portal lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Biome check
+        run: npm run lint
+
+  # ---------------------------------------------------------------------------
+  # 2) Tests del portal (Vitest) + typecheck + build de Next.js
+  #    Cubre "contratos de API" (portal/src/contracts/*.test.ts).
+  # ---------------------------------------------------------------------------
+  portal-tests:
+    name: Portal (Vitest + typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # El build de Next.js genera next-env.d.ts y .next/types, que tsc necesita
+      # para resolver los tipos de Next. Por eso build va ANTES del typecheck.
+      - name: Build (Next.js)
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Vitest
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # 3) Tests del worker Python (pytest, CPU)
+  #    Incluye:
+  #      - fuga del manifiesto        -> ml/tests/test_make_split.py
+  #      - reproducibilidad + smoke   -> tests/trainer/test_train.py, test_data.py
+  #      - recarga desde S3 + inferir -> tests/serving/test_inference.py (moto)
+  #      - contratos de API (FastAPI) -> tests/serving/test_app.py
+  #    Usa un bucket S3 simulado (moto), así el CI queda verde sin secretos.
+  # ---------------------------------------------------------------------------
+  worker-tests:
+    name: Worker (pytest, CPU)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements-trainer.txt
+            requirements-serving.txt
+            ml/requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies (torch CPU + tests)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt --extra-index-url "$PIP_EXTRA_INDEX_URL"
+
+      - name: Ruff (lint del worker)
+        run: ruff check .
+
+      - name: Pytest (fuga, reproducibilidad, smoke train CPU, reload S3, contratos)
+        run: pytest -q
+
+  # ---------------------------------------------------------------------------
+  # 4) Escaneo de secretos con gitleaks
+  #    "escaneo de secretos sin hallazgos" -> falla el job si detecta algo.
+  # ---------------------------------------------------------------------------
+  gitleaks:
+    name: Gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # historial completo para escanear todos los commits
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  # ---------------------------------------------------------------------------
+  # 5) (Opcional) Smoke de inferencia contra S3 REAL usando secretos de Actions.
+  #    El prompt pide "descargar el modelo publicado de S3 usando secretos de
+  #    Actions". La suite principal ya cubre esto con moto (S3 simulado) para
+  #    mantener el CI verde sin infraestructura. Este job adicional lo prueba
+  #    contra AWS real, pero SOLO si los secretos existen, así su ausencia no
+  #    tumba el CI. Configura en el repo:
+  #      Settings -> Secrets and variables -> Actions:
+  #        MODELS_S3_BUCKET, MODELS_AWS_ACCESS_KEY_ID, MODELS_AWS_SECRET_ACCESS_KEY
+  #      (opcional) variable MODEL_VERSION (por defecto 1.0.0)
+  # ---------------------------------------------------------------------------
+  s3-inference-smoke:
+    name: S3 real inference smoke (opcional)
+    runs-on: ubuntu-latest
+    needs: worker-tests
+    # Solo corre en push a main o manualmente, y solo si hay bucket configurado.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that S3 secrets are present
+        id: guard
+        env:
+          MODELS_S3_BUCKET: ${{ secrets.MODELS_S3_BUCKET }}
+        run: |
+          if [ -z "$MODELS_S3_BUCKET" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Sin MODELS_S3_BUCKET: se omite el smoke contra S3 real."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.guard.outputs.run == 'true'
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements-serving.txt
+            requirements-trainer.txt
+
+      - name: Install serving deps (torch CPU)
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-serving.txt --extra-index-url "$PIP_EXTRA_INDEX_URL"
+
+      - name: Download published model from S3 and run inference
+        if: steps.guard.outputs.run == 'true'
+        env:
+          MODELS_S3_BUCKET: ${{ secrets.MODELS_S3_BUCKET }}
+          MODELS_AWS_ACCESS_KEY_ID: ${{ secrets.MODELS_AWS_ACCESS_KEY_ID }}
+          MODELS_AWS_SECRET_ACCESS_KEY: ${{ secrets.MODELS_AWS_SECRET_ACCESS_KEY }}
+          MODELS_AWS_REGION: ${{ secrets.MODELS_AWS_REGION || 'us-east-1' }}
+          MODEL_VERSION: ${{ vars.MODEL_VERSION || '1.0.0' }}
+        run: python scripts/s3_inference_smoke.py

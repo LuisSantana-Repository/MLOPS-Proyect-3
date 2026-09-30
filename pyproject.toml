@@ -5,7 +5,7 @@ description = "Entrenador del clasificador de recortes COCO (Proyecto 3 MLOps, I
 requires-python = ">=3.11,<3.12"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "ml/tests"]
 pythonpath = ["."]
 addopts = "-q"
 filterwarnings = ["ignore:pkg_resources is deprecated:DeprecationWarning"]

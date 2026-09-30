@@ -4,6 +4,7 @@ para el smoke test de los endpoints de T09. Solo para pruebas locales.
 Uso: python portal/scripts/seed_mlflow_run.py
 """
 
+import contextlib
 import json
 import os
 
@@ -65,10 +66,8 @@ print(f"RUN_ID={run_id}")
 
 # Registra una versión de modelo apuntando al run (Model Registry).
 client = MlflowClient(TRACKING_URI)
-try:
+with contextlib.suppress(Exception):  # ya existe
     client.create_registered_model(MODEL_NAME)
-except Exception:
-    pass  # ya existe
 source = f"{run.info.artifact_uri}/model"
 mv = client.create_model_version(name=MODEL_NAME, source=source, run_id=run_id)
 print(f"MODEL={MODEL_NAME} VERSION={mv.version}")
