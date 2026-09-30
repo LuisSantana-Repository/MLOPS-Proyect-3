@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/**
+ * Contrato de GET /api/experiments/[runId]/metrics (T09 / T14).
+ * Historial por época; por defecto train_loss y val_loss, ordenado por step.
+ * 404 si el run no existe.
+ */
+
 const getRun = vi.fn();
 const getMetricHistory = vi.fn();
 
@@ -11,50 +17,40 @@ vi.mock("@/lib/mlflow", () => ({
 import { GET } from "./route";
 
 const ctx = (runId: string) => ({ params: Promise.resolve({ runId }) });
-const call = (runId: string, qs = "") =>
-  GET(new Request(`http://localhost/api/experiments/${runId}/metrics${qs}`), ctx(runId));
+const req = (qs = "") => new Request(`http://localhost/api/experiments/run-1/metrics${qs}`);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  getRun.mockResolvedValue({ runId: "run-1" });
+  // Devuelve puntos desordenados para comprobar que el handler los ordena por step.
+  getMetricHistory.mockImplementation(async (_runId: string, key: string) => [
+    { key, value: 0.2, timestamp: 20, step: 2 },
+    { key, value: 0.9, timestamp: 10, step: 0 },
+    { key, value: 0.5, timestamp: 15, step: 1 },
+  ]);
+});
 
 describe("GET /api/experiments/[runId]/metrics", () => {
-  beforeEach(() => {
-    getRun.mockReset();
-    getMetricHistory.mockReset();
-  });
-
-  it("devuelve train_loss y val_loss por época, ordenadas", async () => {
-    getRun.mockResolvedValue({ runId: "run-1" });
-    getMetricHistory.mockImplementation((_run: string, key: string) =>
-      Promise.resolve(
-        key === "train_loss"
-          ? [
-              { key, value: 0.5, timestamp: 20, step: 1 },
-              { key, value: 0.9, timestamp: 10, step: 0 },
-            ]
-          : [{ key, value: 0.6, timestamp: 15, step: 0 }],
-      ),
-    );
-
-    const res = await call("run-1");
+  it("200: por defecto devuelve train_loss y val_loss ordenados por step", async () => {
+    const res = await GET(req(), ctx("run-1"));
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(Object.keys(json.metrics).sort()).toEqual(["train_loss", "val_loss"]);
-    // Ordenadas por step ascendente.
-    expect(json.metrics.train_loss.map((p: { step: number }) => p.step)).toEqual([0, 1]);
-    expect(json.metrics.val_loss[0].value).toBe(0.6);
+    const body = await res.json();
+    expect(Object.keys(body.metrics).sort()).toEqual(["train_loss", "val_loss"]);
+    expect(body.metrics.train_loss.map((p: { step: number }) => p.step)).toEqual([0, 1, 2]);
   });
 
-  it("respeta ?keys=train_acc,val_acc", async () => {
-    getRun.mockResolvedValue({ runId: "run-1" });
-    getMetricHistory.mockResolvedValue([]);
-    const res = await call("run-1", "?keys=train_acc,val_acc");
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(Object.keys(json.metrics).sort()).toEqual(["train_acc", "val_acc"]);
+  it("200: respeta ?keys=train_acc,val_acc", async () => {
+    const res = await GET(req("?keys=train_acc,val_acc"), ctx("run-1"));
+    const body = await res.json();
+    expect(Object.keys(body.metrics).sort()).toEqual(["train_acc", "val_acc"]);
+    expect(getMetricHistory).toHaveBeenCalledWith("run-1", "train_acc");
+    expect(getMetricHistory).toHaveBeenCalledWith("run-1", "val_acc");
   });
 
-  it("404 si el run no existe", async () => {
+  it("404: el run no existe", async () => {
     getRun.mockResolvedValue(null);
-    const res = await call("nope");
+    const res = await GET(req(), ctx("nope"));
     expect(res.status).toBe(404);
-    expect(getMetricHistory).not.toHaveBeenCalled();
+    expect((await res.json()).error.code).toBe("not_found");
   });
 });

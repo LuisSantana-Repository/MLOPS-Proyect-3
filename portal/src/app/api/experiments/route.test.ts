@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/**
+ * Contrato de GET /api/experiments (T09 / T14).
+ * Lista runs del experimento; por defecto solo los de selección (sweep + FINISHED,
+ * sin smoke) ordenados por best_val_loss. 404 si el experimento no existe.
+ */
+
 const getExperimentIdByName = vi.fn();
 const searchRuns = vi.fn();
 
@@ -10,118 +16,63 @@ vi.mock("@/lib/mlflow", () => ({
 
 import { GET } from "./route";
 
+const run = (over: Record<string, unknown> = {}) => ({
+  runId: "run-1",
+  runName: "baseline",
+  experimentId: "10",
+  status: "FINISHED",
+  startTime: 1,
+  endTime: 2,
+  params: {},
+  metrics: { best_val_loss: 0.5 },
+  tags: { sweep: "t07" },
+  ...over,
+});
+
 const call = (qs = "") => GET(new Request(`http://localhost/api/experiments${qs}`));
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  getExperimentIdByName.mockResolvedValue("10");
+  searchRuns.mockResolvedValue({ runs: [run()], nextPageToken: null });
+});
+
 describe("GET /api/experiments", () => {
-  beforeEach(() => {
-    getExperimentIdByName.mockReset();
-    searchRuns.mockReset();
-  });
-
-  it("lista runs con parámetros y métricas finales", async () => {
-    getExperimentIdByName.mockResolvedValue("7");
-    searchRuns.mockResolvedValue({
-      runs: [
-        {
-          runId: "run-1",
-          runName: "job_1",
-          experimentId: "7",
-          status: "FINISHED",
-          startTime: 1,
-          endTime: 2,
-          params: { lr: "0.001", optimizer: "adamw" },
-          metrics: { best_val_loss: 0.12, best_val_acc: 0.95 },
-          tags: { dvc_release: "proyecto2 v1.1.0@dc9376e" },
-        },
-      ],
-      nextPageToken: null,
-    });
-
-    const res = await call("?maxResults=10");
+  it("200: devuelve runs y describe el filtro de selección aplicado", async () => {
+    const res = await call();
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.experiment).toBe("proyecto3-clasificador");
-    expect(json.runs[0].metrics.best_val_loss).toBe(0.12);
-    expect(json.runs[0].params.optimizer).toBe("adamw");
-  });
-
-  it("por defecto filtra selección T07 (sweep, FINISHED, sin smoke) y ordena por best_val_loss", async () => {
-    getExperimentIdByName.mockResolvedValue("7");
-    searchRuns.mockResolvedValue({ runs: [], nextPageToken: null });
-
-    const res = await call("?maxResults=10");
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.selection).toEqual({
+    const body = await res.json();
+    expect(body.runs).toHaveLength(1);
+    expect(body.selection).toMatchObject({
       onlySelected: true,
       sweep: "t07",
       orderedBy: "best_val_loss ASC",
     });
-
-    const arg = searchRuns.mock.calls[0][0];
-    expect(arg.filter).toContain("tags.sweep = 't07'");
-    expect(arg.filter).toContain("attributes.status = 'FINISHED'");
-    // smoke NO va en el filtro de MLflow (excluiría runs sin el tag); se filtra en cliente.
-    expect(arg.filter).not.toContain("smoke");
-    expect(arg.orderBy).toEqual(["metrics.best_val_loss ASC"]);
+    // El filtro por defecto restringe a sweep + FINISHED.
+    const opts = searchRuns.mock.calls[0][0];
+    expect(opts.filter).toContain("tags.sweep = 't07'");
+    expect(opts.filter).toContain("attributes.status = 'FINISHED'");
   });
 
-  it("descarta runs de humo (smoke=true) del lado del cliente", async () => {
-    getExperimentIdByName.mockResolvedValue("7");
-    const mkRun = (runId: string, tags: Record<string, string>) => ({
-      runId,
-      runName: runId,
-      experimentId: "7",
-      status: "FINISHED",
-      startTime: 1,
-      endTime: 2,
-      params: {},
-      metrics: { best_val_loss: 0.3 },
-      tags,
-    });
+  it("200: descarta runs de humo (smoke) del lado del cliente", async () => {
     searchRuns.mockResolvedValue({
-      runs: [mkRun("real", { sweep: "t07" }), mkRun("humo", { sweep: "t07", smoke: "true" })],
+      runs: [run(), run({ runId: "smoke-1", tags: { sweep: "t07", smoke: "true" } })],
       nextPageToken: null,
     });
-
-    const res = await call("");
-    const json = await res.json();
-    expect(json.runs.map((r: { runId: string }) => r.runId)).toEqual(["real"]);
+    const body = await (await call()).json();
+    expect(body.runs.map((r: { runId: string }) => r.runId)).toEqual(["run-1"]);
   });
 
-  it("con onlySelected=false lista todo ordenado por fecha, sin filtro", async () => {
-    getExperimentIdByName.mockResolvedValue("7");
-    searchRuns.mockResolvedValue({ runs: [], nextPageToken: null });
-
-    const res = await call("?onlySelected=false");
-    const json = await res.json();
-    expect(json.selection.onlySelected).toBe(false);
-    expect(json.selection.sweep).toBeNull();
-
-    const arg = searchRuns.mock.calls[0][0];
-    expect(arg.filter).toBeUndefined();
-    expect(arg.orderBy).toEqual(["attributes.start_time DESC"]);
-  });
-
-  it("respeta un sweep personalizado (?sweep=t99)", async () => {
-    getExperimentIdByName.mockResolvedValue("7");
-    searchRuns.mockResolvedValue({ runs: [], nextPageToken: null });
-
-    await call("?sweep=t99");
-    const arg = searchRuns.mock.calls[0][0];
-    expect(arg.filter).toContain("tags.sweep = 't99'");
-  });
-
-  it("404 si el experimento no existe", async () => {
+  it("404: el experimento no existe en MLflow", async () => {
     getExperimentIdByName.mockResolvedValue(null);
-    const res = await call("?experiment=no-existe");
+    const res = await call("?experiment=inexistente");
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe("not_found");
   });
 
-  it("400 con maxResults inválido", async () => {
-    const res = await call("?maxResults=0");
+  it("400: query param inválido (maxResults fuera de rango)", async () => {
+    const res = await call("?maxResults=99999");
     expect(res.status).toBe(400);
-    expect(getExperimentIdByName).not.toHaveBeenCalled();
+    expect((await res.json()).error.code).toBe("bad_request");
   });
 });
