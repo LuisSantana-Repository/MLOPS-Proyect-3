@@ -12,6 +12,10 @@ export default function Home() {
         <li>
           <Link href="/experiments">Experiments</Link>: comparar runs, ver curvas y el candidato.
         </li>
+        <li>
+          <Link href="/evaluation">Evaluation</Link>: métricas de test, matriz de confusión y
+          errores.
+        </li>
       </ul>
     </main>
   );

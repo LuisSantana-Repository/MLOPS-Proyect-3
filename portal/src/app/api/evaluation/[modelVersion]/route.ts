@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { EvaluationMetrics, EvaluationResponse } from "@/contracts";
 import { badRequest, handleRouteError, notFound, parseOrThrow } from "@/lib/http";
 import { getModelVersion, getRun, type NormalizedRun } from "@/lib/mlflow";
+import { loadTestEvaluation } from "@/lib/test-evaluation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,10 @@ export const dynamic = "force-dynamic";
  *
  * Devuelve las métricas de evaluación (test/eval) del run de origen, más matriz
  * de confusión y clases si el run las publicó.
+ *
+ * T12: `test` trae la evaluación calculada desde `test/predictions.csv` de T08
+ * (accuracy, F1 macro, métricas por clase, matriz y errores por muestra), o null
+ * si el run todavía no se evalúa sobre test.
  */
 
 const paramSchema = z.object({
@@ -98,13 +103,15 @@ export async function GET(
     }
 
     const { confusionMatrix, classes } = confusionAndClasses(run);
+    const test = await loadTestEvaluation(mv.runId ?? run.runId, run.metrics);
     const body: EvaluationResponse = {
       modelName: parsed.name,
       modelVersion: parsed.version,
       runId: mv.runId,
       metrics: evaluationMetrics(run),
-      confusionMatrix,
-      classes,
+      confusionMatrix: confusionMatrix ?? test?.confusionMatrix.matrix ?? null,
+      classes: classes ?? test?.confusionMatrix.labels ?? null,
+      test,
     };
     return NextResponse.json(body);
   } catch (err) {

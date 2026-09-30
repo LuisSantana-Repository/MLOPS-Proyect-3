@@ -50,7 +50,9 @@ describe("MetricCards", () => {
   });
 
   it("avisa cuando no llega a la meta", () => {
-    const html = renderToStaticMarkup(<MetricCards test={{ ...test, accuracy: 0.8, meetsTarget: false }} />);
+    const html = renderToStaticMarkup(
+      <MetricCards test={{ ...test, accuracy: 0.8, meetsTarget: false }} />,
+    );
     expect(html).toContain("80.0%");
     expect(html).toContain("No llega a la meta (≥ 85%)");
   });
@@ -59,7 +61,8 @@ describe("MetricCards", () => {
 describe("ClassMetricsTable", () => {
   it("precisión, recall, F1 y soporte por clase", () => {
     const html = renderToStaticMarkup(<ClassMetricsTable test={test} />);
-    for (const text of ["person", "car", "0.9400", "0.9070", ">81<", ">54<"]) expect(html).toContain(text);
+    for (const text of ["person", "car", "0.9400", "0.9070", ">81<", ">54<"])
+      expect(html).toContain(text);
   });
 });
 
@@ -93,6 +96,8 @@ describe("ErrorGallery", () => {
 
 describe("EvaluationDashboard", () => {
   it("empieza cargando, sin datos inventados", () => {
-    expect(renderToStaticMarkup(<EvaluationDashboard initialModel={null} />)).toContain("Cargando modelos");
+    expect(renderToStaticMarkup(<EvaluationDashboard initialModel={null} />)).toContain(
+      "Cargando modelos",
+    );
   });
 });

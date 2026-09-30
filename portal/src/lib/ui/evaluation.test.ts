@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ModelVersionInfo, TestPrediction } from "@/contracts";
-import { cropUrl, filterErrors, formatPercent, heatmapRows, modelKey, pickDefaultModel } from "./evaluation";
+import {
+  cropUrl,
+  filterErrors,
+  formatPercent,
+  heatmapRows,
+  modelKey,
+  pickDefaultModel,
+} from "./evaluation";
 
 function model(version: string, created: number | null, name = "clasificador"): ModelVersionInfo {
   return {
@@ -35,11 +42,15 @@ describe("modelos", () => {
   });
 
   it("por defecto elige la versión publicada más reciente", () => {
-    expect(pickDefaultModel([model("1", 100), model("3", 300), model("2", 200)])).toBe("clasificador:3");
+    expect(pickDefaultModel([model("1", 100), model("3", 300), model("2", 200)])).toBe(
+      "clasificador:3",
+    );
   });
 
   it("sin fechas, la versión numérica más alta", () => {
-    expect(pickDefaultModel([model("2", null), model("10", null), model("9", null)])).toBe("clasificador:10");
+    expect(pickDefaultModel([model("2", null), model("10", null), model("9", null)])).toBe(
+      "clasificador:10",
+    );
   });
 
   it("sin modelos -> null", () => {
@@ -85,7 +96,10 @@ describe("filterErrors", () => {
   });
 
   it("filtra por clase real, predicha o ambas", () => {
-    expect(filterErrors(errors, { yTrue: "car", yPred: "" }).map((e) => e.annId)).toEqual(["2", "3"]);
+    expect(filterErrors(errors, { yTrue: "car", yPred: "" }).map((e) => e.annId)).toEqual([
+      "2",
+      "3",
+    ]);
     expect(filterErrors(errors, { yTrue: "", yPred: "person" }).map((e) => e.annId)).toEqual(["2"]);
     expect(filterErrors(errors, { yTrue: "car", yPred: "dog" }).map((e) => e.annId)).toEqual(["3"]);
   });

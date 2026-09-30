@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchMlflowArtifact, loadTestEvaluation, PREDICTIONS_ARTIFACT, readRepoPredictions } from "./test-evaluation";
+import {
+  fetchMlflowArtifact,
+  loadTestEvaluation,
+  PREDICTIONS_ARTIFACT,
+  readRepoPredictions,
+} from "./test-evaluation";
 
 const RUN = "fe32e1388dbd465cae714a69bf80f685";
 const CSV = [
@@ -23,12 +28,16 @@ afterEach(async () => {
 
 async function writeRepoReport(runId: string, csv = CSV) {
   await mkdir(join(root, "reports", "t08"), { recursive: true });
-  await writeFile(join(root, "reports", "t08", "metrics.json"), JSON.stringify({ run_id: runId, accuracy: 0.5 }));
+  await writeFile(
+    join(root, "reports", "t08", "metrics.json"),
+    JSON.stringify({ run_id: runId, accuracy: 0.5 }),
+  );
   await writeFile(join(root, "reports", "t08", "predictions.csv"), csv);
 }
 
 const respond = (status: number, body = "") =>
-  vi.fn(async () => new Response(body, { status })) as unknown as typeof fetch & ReturnType<typeof vi.fn>;
+  vi.fn(async () => new Response(body, { status })) as unknown as typeof fetch &
+    ReturnType<typeof vi.fn>;
 
 describe("fetchMlflowArtifact", () => {
   it("pide el artefacto del run al servidor de MLflow", async () => {
@@ -45,7 +54,9 @@ describe("fetchMlflowArtifact", () => {
   });
 
   it("error del servidor -> 502", async () => {
-    await expect(fetchMlflowArtifact(RUN, PREDICTIONS_ARTIFACT, respond(500, "boom"))).rejects.toMatchObject({
+    await expect(
+      fetchMlflowArtifact(RUN, PREDICTIONS_ARTIFACT, respond(500, "boom")),
+    ).rejects.toMatchObject({
       status: 502,
     });
   });
@@ -54,7 +65,9 @@ describe("fetchMlflowArtifact", () => {
     const down = (async () => {
       throw new TypeError("fetch failed");
     }) as unknown as typeof fetch;
-    await expect(fetchMlflowArtifact(RUN, PREDICTIONS_ARTIFACT, down)).rejects.toMatchObject({ status: 502 });
+    await expect(fetchMlflowArtifact(RUN, PREDICTIONS_ARTIFACT, down)).rejects.toMatchObject({
+      status: 502,
+    });
   });
 });
 
@@ -100,13 +113,17 @@ describe("loadTestEvaluation", () => {
   });
 
   it("MLflow caído y sin respaldo: propaga el 502", async () => {
-    await expect(loadTestEvaluation(RUN, evaluated, { root, fetchImpl: respond(503) })).rejects.toMatchObject({
+    await expect(
+      loadTestEvaluation(RUN, evaluated, { root, fetchImpl: respond(503) }),
+    ).rejects.toMatchObject({
       status: 502,
     });
   });
 
   it("todavía sin evaluación de test (T08 no se ha corrido) -> null", async () => {
-    expect(await loadTestEvaluation(RUN, { best_val_loss: 0.04 }, { root, fetchImpl: respond(404) })).toBeNull();
+    expect(
+      await loadTestEvaluation(RUN, { best_val_loss: 0.04 }, { root, fetchImpl: respond(404) }),
+    ).toBeNull();
   });
 
   it("predictions.csv corrupto -> 500 con mensaje", async () => {

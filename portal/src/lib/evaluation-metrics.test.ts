@@ -46,7 +46,9 @@ describe("parsePredictionsCsv", () => {
   });
 
   it("falla si no hay columnas de probabilidad", () => {
-    expect(() => parsePredictionsCsv("crop_path,ann_id,image_id,y_true,y_pred\na,1,1,x,x")).toThrow(/prob_/);
+    expect(() => parsePredictionsCsv("crop_path,ann_id,image_id,y_true,y_pred\na,1,1,x,x")).toThrow(
+      /prob_/,
+    );
   });
 
   it("falla si y_pred no es el argmax de las probabilidades", () => {
@@ -123,7 +125,11 @@ describe("computeTestEvaluation", () => {
     expect(byMetric.test_accuracy.matches).toBe(true);
     expect(byMetric.test_f1_macro.matches).toBe(true);
     expect(byMetric.test_support_person.matches).toBe(true);
-    expect(byMetric.test_precision_car).toMatchObject({ matches: false, logged: 0.9, computed: 0.5 });
+    expect(byMetric.test_precision_car).toMatchObject({
+      matches: false,
+      logged: 0.9,
+      computed: 0.5,
+    });
     expect(byMetric.test_recall_person).toMatchObject({ logged: null, matches: null });
   });
 });

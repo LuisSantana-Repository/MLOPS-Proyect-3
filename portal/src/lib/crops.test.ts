@@ -9,7 +9,10 @@ let root: string;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "crops-"));
   await mkdir(join(root, "data", "crops", "crops"), { recursive: true });
-  await writeFile(join(root, "data", "crops", "crops", "12_345.jpg"), Buffer.from([0xff, 0xd8, 0xff]));
+  await writeFile(
+    join(root, "data", "crops", "crops", "12_345.jpg"),
+    Buffer.from([0xff, 0xd8, 0xff]),
+  );
 });
 
 afterEach(async () => {
@@ -18,7 +21,9 @@ afterEach(async () => {
 
 describe("resolveCropPath", () => {
   it("acepta crop_path de T03 (crops/<image_id>_<ann_id>.jpg)", () => {
-    expect(resolveCropPath(root, ["crops", "12_345.jpg"])).toBe(join(root, "data", "crops", "crops", "12_345.jpg"));
+    expect(resolveCropPath(root, ["crops", "12_345.jpg"])).toBe(
+      join(root, "data", "crops", "crops", "12_345.jpg"),
+    );
   });
 
   it.each([
