@@ -89,7 +89,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+      args:
+        # Sin .git en la imagen: el commit llega por aquí para la procedencia del run.
+        # Uso: GIT_COMMIT=$(git rev-parse HEAD) docker compose build worker
+        GIT_COMMIT: ${GIT_COMMIT:-no disponible}
     restart: always
+    # Recortes, manifiesto y release_info.json de T03/T04 (versionados con DVC; hacer `dvc pull` antes).
+    volumes:
+      - ./data:/app/data:ro
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       # Credenciales de MinIO para el artifact store de MLflow (AWS_* = MinIO).
@@ -97,11 +104,12 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
       REDIS_HOST: redis
+      ML_JOBS_QUEUE: ml_jobs
       # Bucket de modelos de T10 (AWS S3 real) con credenciales dedicadas.
       MODELS_S3_BUCKET: ${S3_BUCKET}
       MODELS_AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       MODELS_AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      # Acceso a MariaDB para escribir/leer model_versions.
+      # MariaDB: training_jobs (estado y logs de cada job) y model_versions.
       MYSQL_HOST: db
       MYSQL_PORT: "3306"
       MYSQL_USER: ${MYSQL_USER}
