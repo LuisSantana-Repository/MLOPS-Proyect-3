@@ -28,6 +28,16 @@ function model(
     creationTimestamp: created,
     lastUpdatedTimestamp: created,
     description: null,
+    // Campos de publicación (T13); no intervienen en la elección de /evaluation.
+    dvcRelease: null,
+    s3Bucket: null,
+    s3Uri: null,
+    publishedAt: null,
+    publication: { status: "unverified", missingFiles: [], checkedAt: "", message: null },
+    files: [],
+    hasModelCard: false,
+    mlflowRunUrl: null,
+    metrics: { bestValLoss: null, bestValAcc: null, testAccuracy: null, testF1Macro: null },
   };
 }
 

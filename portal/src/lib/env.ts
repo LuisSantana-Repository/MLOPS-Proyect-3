@@ -32,6 +32,41 @@ export const env = {
   REDIS_PORT: num(process.env.REDIS_PORT, 6379),
   ML_JOBS_QUEUE: process.env.ML_JOBS_QUEUE?.trim() || "ml_jobs",
 
+  // MLflow UI para enlazar runs (por defecto, el mismo servidor del tracking).
+  MLFLOW_UI_URL: (
+    process.env.MLFLOW_UI_URL?.trim() ||
+    process.env.MLFLOW_TRACKING_URI?.trim() ||
+    "http://127.0.0.1:5000"
+  ).replace(/\/$/, ""),
+
+  // Servicio de inferencia de T10 (FastAPI, POST /predict).
+  INFERENCE_URL: (process.env.INFERENCE_URL?.trim() || "http://127.0.0.1:8000").replace(/\/$/, ""),
+  INFERENCE_TIMEOUT_MS: num(process.env.INFERENCE_TIMEOUT_MS, 60_000),
+
+  // Bucket de modelos publicados (T10). Mismas variables que serving/storage.py:
+  // AWS real por defecto; MODELS_S3_USE_MINIO=1 para probar contra MinIO.
+  MODELS_S3_USE_MINIO: ["1", "true", "yes"].includes(
+    (process.env.MODELS_S3_USE_MINIO ?? "").trim().toLowerCase(),
+  ),
+  MODELS_S3_BUCKET:
+    process.env.MODELS_S3_BUCKET?.trim() || process.env.S3_BUCKET?.trim() || undefined,
+  MODELS_S3_ENDPOINT_URL: process.env.MODELS_S3_ENDPOINT_URL?.trim() || undefined,
+  MODELS_AWS_REGION:
+    process.env.MODELS_AWS_REGION?.trim() || process.env.AWS_REGION?.trim() || "us-east-1",
+  MODELS_AWS_ACCESS_KEY_ID:
+    process.env.MODELS_AWS_ACCESS_KEY_ID?.trim() || process.env.AWS_ACCESS_KEY_ID?.trim(),
+  MODELS_AWS_SECRET_ACCESS_KEY:
+    process.env.MODELS_AWS_SECRET_ACCESS_KEY?.trim() || process.env.AWS_SECRET_ACCESS_KEY?.trim(),
+
+  // MinIO del stack: imágenes subidas desde /inference para la cola de anotación.
+  MINIO_ENDPOINT: (process.env.MINIO_ENDPOINT?.trim() || "http://127.0.0.1:9000").replace(
+    /\/$/,
+    "",
+  ),
+  MINIO_ACCESS_KEY: process.env.MINIO_ACCESS_KEY?.trim() || process.env.MINIO_ROOT_USER?.trim(),
+  MINIO_SECRET_KEY: process.env.MINIO_SECRET_KEY?.trim() || process.env.MINIO_ROOT_PASSWORD?.trim(),
+  ANNOTATION_BUCKET: process.env.ANNOTATION_BUCKET?.trim() || "annotation-images",
+
   // Raíz del repo, donde viven los artefactos versionados de T03/T04/T07.
   // `npm run dev` corre dentro de portal/, así que por defecto es la carpeta padre.
   REPO_ROOT: resolve(process.env.REPO_ROOT?.trim() || resolve(process.cwd(), "..")),
