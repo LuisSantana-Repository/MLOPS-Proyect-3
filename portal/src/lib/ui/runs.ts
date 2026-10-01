@@ -1,6 +1,7 @@
 import type { ExperimentRun } from "@/contracts";
 
 /** Columnas de la tabla de /experiments. `param:` y `metric:` leen de MLflow. */
+// audit-ok: definición de columnas de la tabla, no datos
 export const RUN_COLUMNS = [
   { key: "runName", label: "Run" },
   { key: "param:optimizer", label: "optimizer" },

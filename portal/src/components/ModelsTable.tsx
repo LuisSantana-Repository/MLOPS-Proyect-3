@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ModelVersionInfo } from "@/contracts";
+import { evaluationHref, experimentsRunHref } from "@/lib/ui/links";
 import {
   downloadHref,
   formatDateTime,
@@ -12,6 +13,7 @@ import {
 /**
  * Versiones publicadas con su trazabilidad. La versión del MODELO (semver) y el
  * release del DATASET (DVC) van en columnas separadas para no confundirlas.
+ * Cada versión enlaza a su evaluación y a las curvas de su run (T16).
  */
 export function ModelsTable({
   models,
@@ -42,6 +44,7 @@ export function ModelsTable({
           {models.map((m) => {
             const label = PUBLICATION_LABELS[m.publication.status];
             const usable = m.publication.status === "published";
+            const curves = experimentsRunHref(m.runId);
             return (
               <tr
                 key={m.version}
@@ -78,14 +81,18 @@ export function ModelsTable({
                 <td>{formatDateTime(m.publishedAt)}</td>
                 <td className="num">{formatPercent(m.metrics.testAccuracy, 2)}</td>
                 <td>
-                  {usable ? (
-                    <div className="actions-inline">
-                      <Link href={inferenceHref(m.version)}>Usar en Inference</Link>
-                      <a href={downloadHref(m.version, "weights.pt")}>weights.pt</a>
-                    </div>
-                  ) : (
-                    <span className="muted">No disponible</span>
-                  )}
+                  <div className="actions-inline">
+                    <Link href={evaluationHref(m)}>Evaluación</Link>
+                    {curves ? <Link href={curves}>Curvas</Link> : null}
+                    {usable ? (
+                      <>
+                        <Link href={inferenceHref(m.version)}>Usar en Inference</Link>
+                        <a href={downloadHref(m.version, "weights.pt")}>weights.pt</a>
+                      </>
+                    ) : (
+                      <span className="muted">No disponible</span>
+                    )}
+                  </div>
                 </td>
               </tr>
             );

@@ -12,9 +12,13 @@ type Load =
   | { state: "error"; message: string }
   | { state: "ready"; models: ModelVersionInfo[] };
 
-export function ModelsDashboard() {
+export function ModelsDashboard({
+  initialVersion = null,
+}: {
+  initialVersion?: string | null;
+} = {}) {
   const [load, setLoad] = useState<Load>({ state: "loading" });
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialVersion);
 
   const fetchModels = useCallback(async () => {
     setLoad({ state: "loading" });
