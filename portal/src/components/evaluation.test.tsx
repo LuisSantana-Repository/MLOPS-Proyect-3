@@ -1,10 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { TestEvaluation } from "@/contracts";
+import type { DefaultModelChoice } from "@/lib/ui/evaluation";
 import { ClassMetricsTable } from "./ClassMetricsTable";
 import { ConfusionHeatmap } from "./ConfusionHeatmap";
 import { ErrorGallery } from "./ErrorGallery";
-import { EvaluationDashboard } from "./EvaluationDashboard";
+import { DefaultModelNotice, EvaluationDashboard, WinnerBadge } from "./EvaluationDashboard";
 import { MetricCards } from "./MetricCards";
 
 const test: TestEvaluation = {
@@ -50,9 +51,7 @@ describe("MetricCards", () => {
   });
 
   it("avisa cuando no llega a la meta", () => {
-    const html = renderToStaticMarkup(
-      <MetricCards test={{ ...test, accuracy: 0.8, meetsTarget: false }} />,
-    );
+    const html = renderToStaticMarkup(<MetricCards test={{ ...test, accuracy: 0.8, meetsTarget: false }} />);
     expect(html).toContain("80.0%");
     expect(html).toContain("No llega a la meta (≥ 85%)");
   });
@@ -61,8 +60,7 @@ describe("MetricCards", () => {
 describe("ClassMetricsTable", () => {
   it("precisión, recall, F1 y soporte por clase", () => {
     const html = renderToStaticMarkup(<ClassMetricsTable test={test} />);
-    for (const text of ["person", "car", "0.9400", "0.9070", ">81<", ">54<"])
-      expect(html).toContain(text);
+    for (const text of ["person", "car", "0.9400", "0.9070", ">81<", ">54<"]) expect(html).toContain(text);
   });
 });
 
@@ -94,10 +92,52 @@ describe("ErrorGallery", () => {
   });
 });
 
+describe("Ganador (T07)", () => {
+  const winnerChoice: DefaultModelChoice = {
+    key: "clasificador:1",
+    reason: "winner",
+    winnerKey: "clasificador:1",
+    newerNonWinnerKey: "clasificador:2",
+  };
+
+  it("WinnerBadge marca el ganador", () => {
+    expect(renderToStaticMarkup(<WinnerBadge />)).toContain("Ganador (T07)");
+  });
+
+  it("avisa si hay una versión más reciente que no es la ganadora, con enlace a /experiments", () => {
+    const html = renderToStaticMarkup(<DefaultModelNotice choice={winnerChoice} shownKey="clasificador:1" />);
+    expect(html).toContain("<code>clasificador:2</code>");
+    expect(html).toContain("no es la ganadora y no tiene evaluación de test");
+    expect(html).toContain('href="/experiments"');
+  });
+
+  it("no repite el aviso si ya se está viendo esa versión", () => {
+    const html = renderToStaticMarkup(<DefaultModelNotice choice={winnerChoice} shownKey="clasificador:2" />);
+    expect(html).not.toContain("más reciente");
+  });
+
+  it("sin aviso cuando el ganador es la versión más reciente", () => {
+    const html = renderToStaticMarkup(
+      <DefaultModelNotice choice={{ ...winnerChoice, newerNonWinnerKey: null }} shownKey="clasificador:1" />,
+    );
+    expect(html).toBe("");
+  });
+
+  it("dice que no hay ganador congelado y que se usa la versión READY más reciente", () => {
+    const choice: DefaultModelChoice = {
+      key: "clasificador:2",
+      reason: "latest-ready",
+      winnerKey: null,
+      newerNonWinnerKey: null,
+    };
+    const html = renderToStaticMarkup(<DefaultModelNotice choice={choice} shownKey="clasificador:2" />);
+    expect(html).toContain("reports/t07/selection.json");
+    expect(html).toContain("READY más reciente");
+  });
+});
+
 describe("EvaluationDashboard", () => {
   it("empieza cargando, sin datos inventados", () => {
-    expect(renderToStaticMarkup(<EvaluationDashboard initialModel={null} />)).toContain(
-      "Cargando modelos",
-    );
+    expect(renderToStaticMarkup(<EvaluationDashboard initialModel={null} />)).toContain("Cargando modelos");
   });
 });

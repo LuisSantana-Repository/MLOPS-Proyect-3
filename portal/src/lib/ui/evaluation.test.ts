@@ -1,21 +1,28 @@
 import { describe, expect, it } from "vitest";
 import type { ModelVersionInfo, TestPrediction } from "@/contracts";
 import {
+  chooseDefaultModel,
   cropUrl,
   filterErrors,
   formatPercent,
   heatmapRows,
+  isWinner,
   modelKey,
-  pickDefaultModel,
 } from "./evaluation";
 
-function model(version: string, created: number | null, name = "clasificador"): ModelVersionInfo {
+const WINNER_RUN = "fe32e1388dbd465cae714a69bf80f685";
+
+function model(
+  version: string,
+  created: number | null,
+  options: { runId?: string; status?: string; name?: string } = {},
+): ModelVersionInfo {
   return {
-    name,
+    name: options.name ?? "clasificador",
     version,
     stage: null,
-    status: "READY",
-    runId: `run-${version}`,
+    status: options.status ?? "READY",
+    runId: options.runId ?? `run-${version}`,
     s3Key: null,
     weightsSha256: null,
     creationTimestamp: created,
@@ -36,25 +43,76 @@ function err(annId: string, yTrue: string, yPred: string): TestPrediction {
   };
 }
 
-describe("modelos", () => {
+describe("modelKey e isWinner", () => {
   it("modelKey usa la forma nombre:version del endpoint", () => {
     expect(modelKey(model("3", 1))).toBe("clasificador:3");
   });
 
-  it("por defecto elige la versión publicada más reciente", () => {
-    expect(pickDefaultModel([model("1", 100), model("3", 300), model("2", 200)])).toBe(
-      "clasificador:3",
-    );
+  it("isWinner compara con el run de selection.json", () => {
+    expect(isWinner(WINNER_RUN, WINNER_RUN)).toBe(true);
+    expect(isWinner("otro", WINNER_RUN)).toBe(false);
+    expect(isWinner(null, WINNER_RUN)).toBe(false);
+    expect(isWinner(WINNER_RUN, null)).toBe(false);
+  });
+});
+
+describe("chooseDefaultModel", () => {
+  it("el default elige el ganador aunque haya una versión más nueva", () => {
+    const models = [model("1", 100, { runId: WINNER_RUN }), model("2", 200, { runId: "reentreno" })];
+    expect(chooseDefaultModel(models, WINNER_RUN, null)).toEqual({
+      key: "clasificador:1",
+      reason: "winner",
+      winnerKey: "clasificador:1",
+      newerNonWinnerKey: "clasificador:2",
+    });
   });
 
-  it("sin fechas, la versión numérica más alta", () => {
-    expect(pickDefaultModel([model("2", null), model("10", null), model("9", null)])).toBe(
-      "clasificador:10",
-    );
+  it("sin aviso si la versión más reciente es la ganadora", () => {
+    const models = [model("1", 100), model("2", 200, { runId: WINNER_RUN })];
+    const choice = chooseDefaultModel(models, WINNER_RUN, null);
+    expect(choice.key).toBe("clasificador:2");
+    expect(choice.newerNonWinnerKey).toBeNull();
   });
 
-  it("sin modelos -> null", () => {
-    expect(pickDefaultModel([])).toBeNull();
+  it("si el run ganador tiene varias versiones registradas, usa la más reciente de ellas", () => {
+    const models = [model("1", 100, { runId: WINNER_RUN }), model("4", 400, { runId: WINNER_RUN })];
+    expect(chooseDefaultModel(models, WINNER_RUN, null).key).toBe("clasificador:4");
+  });
+
+  it("sin selección, se usa la más reciente en READY", () => {
+    const models = [model("2", 200), model("3", 300, { status: "PENDING_REGISTRATION" }), model("1", 100)];
+    expect(chooseDefaultModel(models, null, null)).toEqual({
+      key: "clasificador:2",
+      reason: "latest-ready",
+      winnerKey: null,
+      newerNonWinnerKey: null,
+    });
+  });
+
+  it("si el ganador no está registrado, también usa la más reciente en READY", () => {
+    const choice = chooseDefaultModel([model("1", 100), model("2", 200)], WINNER_RUN, null);
+    expect(choice).toMatchObject({ key: "clasificador:2", reason: "latest-ready", winnerKey: null });
+  });
+
+  it("sin fechas, ordena por la versión numérica más alta", () => {
+    const models = [model("2", null), model("10", null), model("9", null)];
+    expect(chooseDefaultModel(models, null, null).key).toBe("clasificador:10");
+  });
+
+  it("?model= tiene prioridad sobre el default", () => {
+    const models = [model("1", 100, { runId: WINNER_RUN }), model("2", 200)];
+    expect(chooseDefaultModel(models, WINNER_RUN, " clasificador:2 ")).toEqual({
+      key: "clasificador:2",
+      reason: "requested",
+      winnerKey: "clasificador:1",
+      newerNonWinnerKey: "clasificador:2",
+    });
+  });
+
+  it("sin ganador ni versiones READY no elige nada", () => {
+    const choice = chooseDefaultModel([model("1", 100, { status: "FAILED_REGISTRATION" })], null, null);
+    expect(choice).toMatchObject({ key: null, reason: "none" });
+    expect(chooseDefaultModel([], null, null).reason).toBe("none");
   });
 });
 
@@ -96,10 +154,7 @@ describe("filterErrors", () => {
   });
 
   it("filtra por clase real, predicha o ambas", () => {
-    expect(filterErrors(errors, { yTrue: "car", yPred: "" }).map((e) => e.annId)).toEqual([
-      "2",
-      "3",
-    ]);
+    expect(filterErrors(errors, { yTrue: "car", yPred: "" }).map((e) => e.annId)).toEqual(["2", "3"]);
     expect(filterErrors(errors, { yTrue: "", yPred: "person" }).map((e) => e.annId)).toEqual(["2"]);
     expect(filterErrors(errors, { yTrue: "car", yPred: "dog" }).map((e) => e.annId)).toEqual(["3"]);
   });
