@@ -42,6 +42,8 @@ export interface ExperimentRun {
   params: Record<string, string>;
   metrics: Record<string, number>;
   tags: Record<string, string>;
+  /** Enlace a la UI de MLflow del run (T16). */
+  mlflowRunUrl?: string | null;
 }
 
 /** Respuesta de GET /api/experiments. */

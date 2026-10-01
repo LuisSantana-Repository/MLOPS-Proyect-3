@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ExperimentRun } from "@/contracts";
-import { evaluationHref, experimentsRunHref, mlflowRunUrl, modelsHref, withMlflowRunUrls } from "./links";
+import {
+  evaluationHref,
+  experimentsRunHref,
+  mlflowRunUrl,
+  modelsHref,
+  withMlflowRunUrls,
+} from "./links";
 
 describe("enlaces entre páginas (T16)", () => {
   it("experimentsRunHref abre las curvas del run", () => {
@@ -39,7 +45,10 @@ describe("enlaces entre páginas (T16)", () => {
       tags: { dvc_release: "proyecto2 v1.1.0@dc9376e" },
     };
     const [withUrl] = withMlflowRunUrls([run], "http://mlflow:5000");
-    expect(withUrl).toEqual({ ...run, mlflowRunUrl: "http://mlflow:5000/#/experiments/1/runs/abc" });
+    expect(withUrl).toEqual({
+      ...run,
+      mlflowRunUrl: "http://mlflow:5000/#/experiments/1/runs/abc",
+    });
     expect(withMlflowRunUrls([run], undefined)[0].mlflowRunUrl).toBeNull();
   });
 });

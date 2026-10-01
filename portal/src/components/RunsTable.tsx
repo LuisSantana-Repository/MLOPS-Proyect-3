@@ -12,7 +12,7 @@ import {
   sortRuns,
 } from "@/lib/ui/runs";
 
-/** Tabla ordenable de runs; el candidato congelado lleva ★. */
+/** Tabla ordenable de runs; el candidato congelado lleva ★. Cada run muestra su release DVC. */
 export function RunsTable({
   runs,
   candidateRunId,
@@ -71,6 +71,17 @@ export function RunsTable({
                       {formatCell(cellValue(run, c.key), c.key)}
                       <br />
                       <code className="muted">{run.runId.slice(0, 8)}</code>
+                      {run.tags.dvc_release ? (
+                        <>
+                          <br />
+                          <span
+                            className="muted"
+                            title="Release DVC del dataset con que se entrenó"
+                          >
+                            {run.tags.dvc_release}
+                          </span>
+                        </>
+                      ) : null}
                     </>
                   ) : (
                     formatCell(cellValue(run, c.key), c.key)
@@ -86,6 +97,14 @@ export function RunsTable({
                 >
                   Ver
                 </button>
+                {run.mlflowRunUrl ? (
+                  <>
+                    {" · "}
+                    <a href={run.mlflowRunUrl} target="_blank" rel="noreferrer">
+                      MLflow ↗
+                    </a>
+                  </>
+                ) : null}
               </td>
             </tr>
           ))}

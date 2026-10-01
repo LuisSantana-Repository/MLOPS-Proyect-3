@@ -16,6 +16,7 @@ import {
   isWinner,
   modelKey,
 } from "@/lib/ui/evaluation";
+import { experimentsRunHref, modelsHref } from "@/lib/ui/links";
 import { ClassMetricsTable } from "./ClassMetricsTable";
 import { ConfusionHeatmap } from "./ConfusionHeatmap";
 import { ErrorGallery } from "./ErrorGallery";
@@ -31,6 +32,23 @@ interface ModelsData {
   list: ModelVersionInfo[];
   winnerRunId: string | null;
   choice: DefaultModelChoice;
+}
+
+/** Enlaces del encabezado: de la evaluación a su entrenamiento y a su versión publicada (T16). */
+export function EvaluationLinks({
+  runId,
+  modelVersion,
+}: {
+  runId: string | null;
+  modelVersion: string;
+}) {
+  const curves = experimentsRunHref(runId);
+  return (
+    <div className="actions">
+      {curves ? <Link href={curves}>Ver curvas del run en Experiments</Link> : null}
+      <Link href={modelsHref(modelVersion)}>Ver versión en Models</Link>
+    </div>
+  );
 }
 
 export function WinnerBadge() {
@@ -227,6 +245,7 @@ function EvaluationView({
             </span>
           ) : null}
         </p>
+        <EvaluationLinks runId={data.runId} modelVersion={data.modelVersion} />
         {!winner && winnerRunId ? (
           <p className="muted">
             Esta versión no es la ganadora (T07). El test se evalúa una sola vez y solo en el run

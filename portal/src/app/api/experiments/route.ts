@@ -3,6 +3,7 @@ import { type ListExperimentsResponse, listExperimentsQuerySchema } from "@/cont
 import { env } from "@/lib/env";
 import { handleRouteError, notFound, parseOrThrow } from "@/lib/http";
 import { getExperimentIdByName, searchRuns } from "@/lib/mlflow";
+import { withMlflowRunUrls } from "@/lib/ui/links";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +55,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const body: ListExperimentsResponse = {
       experiment,
-      runs: selectedRuns,
+      runs: withMlflowRunUrls(selectedRuns, env.MLFLOW_UI_URL),
       nextPageToken,
       selection: {
         onlySelected: query.onlySelected,

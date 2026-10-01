@@ -38,7 +38,12 @@ function model(extra: Partial<ModelVersionInfo> = {}): ModelVersionInfo {
     s3Bucket: "bucket",
     s3Uri: "s3://bucket/models/clasificador/1.0.0",
     publishedAt: "2026-09-30T00:00:00Z",
-    publication: { status: "published", missingFiles: [], checkedAt: "2026-09-30T00:00:00Z", message: null },
+    publication: {
+      status: "published",
+      missingFiles: [],
+      checkedAt: "2026-09-30T00:00:00Z",
+      message: null,
+    },
     files: ["weights.pt"],
     hasModelCard: false,
     mlflowRunUrl: "http://localhost:5000/#/experiments/1/runs/fe32e138",
@@ -65,7 +70,12 @@ describe("/experiments: release y enlace a MLflow", () => {
 
   it("sin enlace de MLflow no muestra el link", () => {
     const html = renderToStaticMarkup(
-      <RunsTable runs={[run({ tags: {} })]} candidateRunId={null} selectedRunId={null} onSelect={noop} />,
+      <RunsTable
+        runs={[run({ tags: {} })]}
+        candidateRunId={null}
+        selectedRunId={null}
+        onSelect={noop}
+      />,
     );
     expect(html).not.toContain("MLflow ↗");
   });
@@ -87,7 +97,9 @@ describe("/evaluation: enlaces al run y a la versión", () => {
 
 describe("/models: enlaces a evaluación y curvas", () => {
   it("cada versión enlaza a su evaluación y a las curvas de su run", () => {
-    const html = renderToStaticMarkup(<ModelsTable models={[model()]} selectedVersion={null} onSelect={noop} />);
+    const html = renderToStaticMarkup(
+      <ModelsTable models={[model()]} selectedVersion={null} onSelect={noop} />,
+    );
     expect(html).toContain('href="/evaluation?model=clasificador%3A1.0.0"');
     expect(html).toContain('href="/experiments?run=fe32e138"');
     expect(html).toContain("Usar en Inference");
@@ -95,9 +107,16 @@ describe("/models: enlaces a evaluación y curvas", () => {
 
   it("aunque el paquete no esté completo en S3, se puede ir a la evaluación y a las curvas", () => {
     const incomplete = model({
-      publication: { status: "incomplete", missingFiles: ["weights.pt"], checkedAt: "x", message: null },
+      publication: {
+        status: "incomplete",
+        missingFiles: ["weights.pt"],
+        checkedAt: "x",
+        message: null,
+      },
     });
-    const html = renderToStaticMarkup(<ModelsTable models={[incomplete]} selectedVersion={null} onSelect={noop} />);
+    const html = renderToStaticMarkup(
+      <ModelsTable models={[incomplete]} selectedVersion={null} onSelect={noop} />,
+    );
     expect(html).toContain('href="/evaluation?model=clasificador%3A1.0.0"');
     expect(html).toContain('href="/experiments?run=fe32e138"');
     expect(html).not.toContain("Usar en Inference");
