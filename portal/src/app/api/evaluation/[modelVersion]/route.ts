@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { EvaluationMetrics, EvaluationResponse } from "@/contracts";
 import { badRequest, handleRouteError, notFound, parseOrThrow } from "@/lib/http";
 import { getModelVersion, getRun, type NormalizedRun } from "@/lib/mlflow";
+import { readPublishedRow } from "@/lib/published-models";
 import { loadTestEvaluation } from "@/lib/test-evaluation";
 
 export const runtime = "nodejs";
@@ -14,6 +15,8 @@ export const dynamic = "force-dynamic";
  * `modelVersion` identifica una versión del registry. Acepta dos formas:
  *   - "modelo:3"        → nombre y versión juntos (recomendado)
  *   - "3" + ?name=modelo → versión en la ruta, nombre por query
+ * La versión puede ser la del Model Registry ("3") o la semántica publicada por
+ * T10 ("1.0.0", tabla `published_models`), que es la que lista GET /api/models (T13).
  *
  * Devuelve las métricas de evaluación (test/eval) del run de origen, más matriz
  * de confusión y clases si el run las publicó.
@@ -25,7 +28,13 @@ export const dynamic = "force-dynamic";
 
 const paramSchema = z.object({
   name: z.string().trim().min(1),
-  version: z.string().trim().regex(/^\d+$/, "la versión debe ser un entero"),
+  version: z
+    .string()
+    .trim()
+    .regex(
+      /^\d+$|^\d+\.\d+\.\d+$/,
+      "la versión debe ser un entero (registry) o MAJOR.MINOR.PATCH (publicada)",
+    ),
 });
 
 function resolveNameVersion(segment: string, nameQuery: string | null) {
@@ -36,6 +45,24 @@ function resolveNameVersion(segment: string, nameQuery: string | null) {
   }
   if (nameQuery) return { name: nameQuery, version: decoded };
   throw badRequest('Indica el modelo como "nombre:version" en la ruta o pasa ?name=<modelo>');
+}
+
+const SEMVER = /^\d+\.\d+\.\d+$/;
+
+/** Run de origen de la versión: `published_models` (semver) o Model Registry (entero). */
+async function resolveRunId(name: string, version: string): Promise<string | null> {
+  if (SEMVER.test(version)) {
+    const row = await readPublishedRow(version);
+    if (!row || row.name !== name) {
+      throw notFound(`No existe la versión publicada ${version} del modelo "${name}"`);
+    }
+    return row.runId;
+  }
+  const mv = await getModelVersion(name, version);
+  if (!mv) {
+    throw notFound(`No existe la versión ${version} del modelo "${name}"`);
+  }
+  return mv.runId;
 }
 
 /** Extrae accuracy, macro-F1 y demás métricas de evaluación del run. */
@@ -90,12 +117,8 @@ export async function GET(
       "identificador de modelo",
     );
 
-    const mv = await getModelVersion(parsed.name, parsed.version);
-    if (!mv) {
-      throw notFound(`No existe la versión ${parsed.version} del modelo "${parsed.name}"`);
-    }
-
-    const run = mv.runId ? await getRun(mv.runId) : null;
+    const runId = await resolveRunId(parsed.name, parsed.version);
+    const run = runId ? await getRun(runId) : null;
     if (!run) {
       throw notFound(
         `La versión ${parsed.version} de "${parsed.name}" no tiene run de origen con métricas`,
@@ -103,11 +126,11 @@ export async function GET(
     }
 
     const { confusionMatrix, classes } = confusionAndClasses(run);
-    const test = await loadTestEvaluation(mv.runId ?? run.runId, run.metrics);
+    const test = await loadTestEvaluation(runId ?? run.runId, run.metrics);
     const body: EvaluationResponse = {
       modelName: parsed.name,
       modelVersion: parsed.version,
-      runId: mv.runId,
+      runId,
       metrics: evaluationMetrics(run),
       confusionMatrix: confusionMatrix ?? test?.confusionMatrix.matrix ?? null,
       classes: classes ?? test?.confusionMatrix.labels ?? null,

@@ -1,5 +1,11 @@
-import { json, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
-import type { CreateTrainingJobParams, JobLogEntry, JobStatus } from "@/contracts";
+import { index, json, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
+import type {
+  AnnotationStatus,
+  CreateTrainingJobParams,
+  ImageRef,
+  JobLogEntry,
+  JobStatus,
+} from "@/contracts";
 import { JOB_STATUSES } from "@/contracts";
 
 /**
@@ -47,3 +53,37 @@ export const publishedModels = mysqlTable("published_models", {
 
 export type PublishedModelRow = typeof publishedModels.$inferSelect;
 export type NewPublishedModelRow = typeof publishedModels.$inferInsert;
+
+/**
+ * Cola de anotación (T13).
+ *
+ * Mismo concepto que las imágenes `pending` del portal del Proyecto 2: imágenes
+ * que un anotador debe revisar. Cada fila guarda de dónde viene la imagen (subida
+ * a MinIO o recorte de T03), la versión de modelo que la clasificó y su sugerencia.
+ */
+export const annotationQueue = mysqlTable(
+  "annotation_queue",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    status: varchar("status", { length: 16 })
+      .$type<AnnotationStatus>()
+      .notNull()
+      .default("pending"),
+    imageKind: varchar("image_kind", { length: 16 }).$type<ImageRef["kind"]>().notNull(),
+    /** Llave en el bucket de MinIO (subidas) o `crop_path` de T03 (recortes). */
+    imageKey: varchar("image_key", { length: 512 }).notNull(),
+    imageSha256: varchar("image_sha256", { length: 64 }),
+    imageContentType: varchar("image_content_type", { length: 32 }),
+    modelVersion: varchar("model_version", { length: 32 }).notNull(),
+    suggestedClass: varchar("suggested_class", { length: 128 }).notNull(),
+    probabilities: json("probabilities").$type<Record<string, number>>().notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("annotation_queue_status_idx").on(table.status),
+    index("annotation_queue_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export type AnnotationQueueRow = typeof annotationQueue.$inferSelect;
+export type NewAnnotationQueueRow = typeof annotationQueue.$inferInsert;

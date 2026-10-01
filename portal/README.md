@@ -36,7 +36,13 @@ replican `trainer/config.py::TrainConfig`.
 | `GET` | `/api/evaluation/[modelVersion]` | Métricas de evaluación (test/eval), matriz de confusión y clases. Acepta `nombre:version` en la ruta o `?name=` + versión. |
 | `GET` | `/api/releases` | Releases DVC aprobados con procedencia (commit del Proyecto 2, md5 de anotaciones, recortes y manifiesto) y conteos 70/20/10 por clase. Lee los artefactos versionados de T03/T04 (T11). |
 | `GET` | `/api/experiments/selection` | Run candidato congelado por T07 (`reports/t07/selection.json`) (T11). |
-| `GET` | `/api/models` | Versiones del Model Registry: versión, run de origen, llave S3 (MinIO) y hash de pesos (`weights_sha256`). |
+| `GET` | `/api/models` | Versiones publicadas (tabla `published_models` de T10): run de origen y enlace a MLflow, release DVC, llave/URI S3, SHA-256 de pesos, fecha, métricas de validación y test, y estado **verificado en S3** (`published` / `incomplete` / `unverified`). Completa con el Model Registry si existe (T13). |
+| `GET` | `/api/models/[version]/card` | Tarjeta del modelo en Markdown: `model_card.md` del paquete (T15) o, si no existe, generada desde `summary.json` (T13). |
+| `GET` | `/api/models/[version]/files/[file]` | `302` a una URL firmada de S3 para descargar un archivo del paquete; `404` si el objeto no existe (T13). |
+| `POST` | `/api/inference` | `multipart/form-data` con `version` y `file`. Valida que la versión esté publicada y completa en S3, y que la imagen sea JPEG/PNG (por firma de bytes, máx. 5 MB); reenvía a `POST /predict` de T10, valida que las probabilidades sumen ≈ 1 y guarda la imagen en MinIO (T13). |
+| `GET` | `/api/annotation-queue` | Cola de anotación (`?status=pending\|annotated\|discarded`, `?limit=`) con conteos por estado (T13). |
+| `POST` | `/api/annotation-queue` | Envía una imagen clasificada a la cola (`pending`) con la clase sugerida; verifica versión publicada, imagen existente y clase = argmax. Responde `201` (T13). |
+| `GET` | `/api/annotation-queue/[id]/image` | Imagen de un elemento de la cola (T13). |
 
 Los errores siguen la forma `ApiErrorBody`:
 
@@ -44,15 +50,19 @@ Los errores siguen la forma `ApiErrorBody`:
 { "error": { "code": "bad_request", "message": "...", "details": { "lr": ["..."] } } }
 ```
 
-Códigos: `bad_request` (400), `not_found` (404), `upstream_error` (502, MLflow/Redis
-caídos), `internal_error` (500).
+Códigos: `bad_request` (400), `not_found` (404), `upstream_error` (502, MLflow/Redis/S3/inferencia
+caídos), `integrity_error` (502, el modelo no pasó la verificación de hash), `schema_missing`
+(500, faltan migraciones: `npm run db:migrate`), `internal_error` (500).
 
-## Páginas (T11)
+## Páginas (T11, T13)
 
 | Ruta | Qué hace |
 | --- | --- |
 | `/training` | Selector del release aprobado (hash, procedencia y split 70/20/10), formulario de los 7 hiperparámetros y 3 semillas validado con el mismo `createTrainingJobSchema` del backend, y panel de progreso que consulta `GET /api/training/jobs/[id]` cada 3 s hasta que el job termina. |
 | `/experiments` | Tabla ordenable de runs (parámetros, mejor `val_loss`, `val_acc`) con el candidato de T07 marcado con ★, y curvas train/val por época del run elegido. `?run=<runId>` abre ese run. Por defecto muestra todos los runs; el filtro "Solo runs de selección" aplica el de T07. |
+| `/models` | Versiones publicadas: versión de **modelo** y release DVC del **dataset** en columnas separadas, run con enlace a MLflow, llave S3, SHA-256, fecha, estado verificado en S3, descargas firmadas y tarjeta del modelo renderizada desde Markdown. Un paquete incompleto en S3 no se ofrece para descargar ni para inferir (T13). |
+| `/inference` | Elige una versión publicada (`?version=` la preselecciona) y sube una imagen; muestra clase, barras de probabilidad y la versión y hash de pesos usados. "Enviar a anotación" crea un elemento real en la cola (T13). |
+| `/annotation-queue` | Cola de anotación por estado, con miniatura, clase sugerida, confianza, versión de modelo y origen (T13). |
 
 Sin datos simulados: cada vista tiene estados de carga, vacío y error (con reintento).
 Las gráficas son SVG propio (`src/lib/ui/chart.ts`), sin librería de gráficas.

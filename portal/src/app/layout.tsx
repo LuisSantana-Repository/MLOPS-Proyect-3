@@ -18,6 +18,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <Link href="/training">Training</Link>
           <Link href="/experiments">Experiments</Link>
           <Link href="/evaluation">Evaluation</Link>
+          <Link href="/models">Models</Link>
+          <Link href="/inference">Inference</Link>
+          <Link href="/annotation-queue">Anotación</Link>
         </nav>
         {children}
       </body>
