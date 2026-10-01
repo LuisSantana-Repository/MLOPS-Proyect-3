@@ -15,6 +15,12 @@ vi.mock("@/lib/mlflow", () => ({
   getRun: (...a: unknown[]) => getRun(...a),
 }));
 
+// T13: versiones semánticas publicadas por T10 (tabla published_models).
+const readPublishedRow = vi.fn();
+vi.mock("@/lib/published-models", () => ({
+  readPublishedRow: (...a: unknown[]) => readPublishedRow(...a),
+}));
+
 // T12: evaluación de test calculada desde predictions.csv de T08.
 vi.mock("@/lib/test-evaluation", () => ({
   loadTestEvaluation: (...a: unknown[]) => loadTestEvaluation(...a),
@@ -67,6 +73,32 @@ describe("GET /api/evaluation/[modelVersion]", () => {
     const res = await GET(req(), ctx("3"));
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("bad_request");
+  });
+
+  it("T13: versión semántica publicada -> run de published_models, sin tocar el registry", async () => {
+    readPublishedRow.mockResolvedValue({
+      name: "clasificador",
+      version: "1.0.0",
+      runId: "run-pub",
+    });
+    const res = await GET(req(), ctx("clasificador:1.0.0"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ modelVersion: "1.0.0", runId: "run-pub" });
+    expect(readPublishedRow).toHaveBeenCalledWith("1.0.0");
+    expect(getModelVersion).not.toHaveBeenCalled();
+    expect(getRun).toHaveBeenCalledWith("run-pub");
+  });
+
+  it("T13: 404 si la versión semántica no está publicada", async () => {
+    readPublishedRow.mockResolvedValue(null);
+    const res = await GET(req(), ctx("clasificador:9.9.9"));
+    expect(res.status).toBe(404);
+  });
+
+  it("400: versión que no es entero ni semántica", async () => {
+    const res = await GET(req(), ctx("clasificador:latest"));
+    expect(res.status).toBe(400);
   });
 
   it("404: la versión no existe en el registry", async () => {

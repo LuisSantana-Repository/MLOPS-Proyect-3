@@ -19,6 +19,50 @@ export interface ModelVersionInfo {
   creationTimestamp: number | null;
   lastUpdatedTimestamp: number | null;
   description: string | null;
+  // --- Publicación (T10 → T13) ---------------------------------------------
+  /** Release DVC del dataset con que se entrenó. Es la versión de los DATOS, no del modelo. */
+  dvcRelease: string | null;
+  /** Bucket y URI del paquete publicado (`s3://<bucket>/models/<name>/<version>`). */
+  s3Bucket: string | null;
+  s3Uri: string | null;
+  /** Fecha de publicación (ISO 8601), de `published_models.created_at`. */
+  publishedAt: string | null;
+  /** Estado verificado en S3; un paquete con archivos faltantes nunca se muestra como publicado. */
+  publication: ModelPublication;
+  /** Archivos del paquete que se pueden descargar. */
+  files: string[];
+  /** Hay `model_card.md` publicado; si no, la tarjeta se genera desde `summary.json`. */
+  hasModelCard: boolean;
+  /** Enlace a la UI de MLflow del run de origen. */
+  mlflowRunUrl: string | null;
+  /** Métricas del run de origen: validación (T07) y test (T08), si existen. */
+  metrics: ModelMetrics;
+}
+
+export const PUBLICATION_STATUSES = ["published", "incomplete", "unverified"] as const;
+export type PublicationStatus = (typeof PUBLICATION_STATUSES)[number];
+
+export interface ModelPublication {
+  /** published = todos los archivos existen en S3; incomplete = falta alguno; unverified = no se pudo consultar S3. */
+  status: PublicationStatus;
+  missingFiles: string[];
+  checkedAt: string;
+  message: string | null;
+}
+
+export interface ModelMetrics {
+  bestValLoss: number | null;
+  bestValAcc: number | null;
+  testAccuracy: number | null;
+  testF1Macro: number | null;
+}
+
+/** Respuesta de GET /api/models/[version]/card. */
+export interface ModelCardResponse {
+  version: string;
+  /** model_card.md publicado (T15) o tarjeta generada desde summary.json. */
+  source: "model_card.md" | "summary.json";
+  markdown: string;
 }
 
 /** Respuesta de GET /api/models. */
