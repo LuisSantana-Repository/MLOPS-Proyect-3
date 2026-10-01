@@ -7,7 +7,7 @@
  *
  * Uso, desde portal/:   node scripts/audit-mocks.mjs
  * Sale con código 1 si encuentra algo. Una línea legítima se justifica con un
- * comentario `audit-ok: <motivo>` en esa misma línea.
+ * comentario `audit-ok: <motivo>` en esa línea o en la anterior.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -72,11 +72,22 @@ const findings = [];
 for (const page of PAGES) {
   const dir = join("src", "app", page);
   if (!existsSync(join(ROOT, dir, "page.tsx"))) {
-    findings.push({ file: `${dir}/page.tsx`, line: 0, id: "missing-page", msg: "no existe la página", code: "" });
+    findings.push({
+      file: `${dir}/page.tsx`,
+      line: 0,
+      id: "missing-page",
+      msg: "no existe la página",
+      code: "",
+    });
   }
 }
 
-const files = [...new Set([...PAGES.flatMap((p) => listFiles(join("src", "app", p))), ...SHARED.flatMap(listFiles)])];
+const files = [
+  ...new Set([
+    ...PAGES.flatMap((p) => listFiles(join("src", "app", p))),
+    ...SHARED.flatMap(listFiles),
+  ]),
+];
 
 for (const file of files) {
   const text = readFileSync(join(ROOT, file), "utf-8");
@@ -85,7 +96,8 @@ for (const file of files) {
     for (const match of text.matchAll(check.re)) {
       const lineNo = text.slice(0, match.index).split("\n").length;
       const line = lines[lineNo - 1] ?? "";
-      if (line.includes("audit-ok") || isComment(line)) continue;
+      const prev = lines[lineNo - 2] ?? "";
+      if (line.includes("audit-ok") || prev.includes("audit-ok") || isComment(line)) continue;
       findings.push({ file, line: lineNo, id: check.id, msg: check.msg, code: line.trim() });
     }
   }
@@ -103,5 +115,7 @@ for (const f of findings) {
   console.log(`${f.file}${f.line ? `:${f.line}` : ""}  [${f.id}] ${f.msg}`);
   if (f.code) console.log(`    ${f.code}`);
 }
-console.log(`\n✗ ${findings.length} hallazgo(s). Corrige cada uno o justifícalo con "audit-ok: <motivo>".`);
+console.log(
+  `\n✗ ${findings.length} hallazgo(s). Corrige cada uno o justifícalo con "audit-ok: <motivo>".`,
+);
 process.exit(1);
