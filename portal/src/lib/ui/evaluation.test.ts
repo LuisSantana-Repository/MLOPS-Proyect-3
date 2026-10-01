@@ -58,7 +58,10 @@ describe("modelKey e isWinner", () => {
 
 describe("chooseDefaultModel", () => {
   it("el default elige el ganador aunque haya una versión más nueva", () => {
-    const models = [model("1", 100, { runId: WINNER_RUN }), model("2", 200, { runId: "reentreno" })];
+    const models = [
+      model("1", 100, { runId: WINNER_RUN }),
+      model("2", 200, { runId: "reentreno" }),
+    ];
     expect(chooseDefaultModel(models, WINNER_RUN, null)).toEqual({
       key: "clasificador:1",
       reason: "winner",
@@ -80,7 +83,11 @@ describe("chooseDefaultModel", () => {
   });
 
   it("sin selección, se usa la más reciente en READY", () => {
-    const models = [model("2", 200), model("3", 300, { status: "PENDING_REGISTRATION" }), model("1", 100)];
+    const models = [
+      model("2", 200),
+      model("3", 300, { status: "PENDING_REGISTRATION" }),
+      model("1", 100),
+    ];
     expect(chooseDefaultModel(models, null, null)).toEqual({
       key: "clasificador:2",
       reason: "latest-ready",
@@ -91,7 +98,11 @@ describe("chooseDefaultModel", () => {
 
   it("si el ganador no está registrado, también usa la más reciente en READY", () => {
     const choice = chooseDefaultModel([model("1", 100), model("2", 200)], WINNER_RUN, null);
-    expect(choice).toMatchObject({ key: "clasificador:2", reason: "latest-ready", winnerKey: null });
+    expect(choice).toMatchObject({
+      key: "clasificador:2",
+      reason: "latest-ready",
+      winnerKey: null,
+    });
   });
 
   it("sin fechas, ordena por la versión numérica más alta", () => {
@@ -110,7 +121,11 @@ describe("chooseDefaultModel", () => {
   });
 
   it("sin ganador ni versiones READY no elige nada", () => {
-    const choice = chooseDefaultModel([model("1", 100, { status: "FAILED_REGISTRATION" })], null, null);
+    const choice = chooseDefaultModel(
+      [model("1", 100, { status: "FAILED_REGISTRATION" })],
+      null,
+      null,
+    );
     expect(choice).toMatchObject({ key: null, reason: "none" });
     expect(chooseDefaultModel([], null, null).reason).toBe("none");
   });
@@ -154,7 +169,10 @@ describe("filterErrors", () => {
   });
 
   it("filtra por clase real, predicha o ambas", () => {
-    expect(filterErrors(errors, { yTrue: "car", yPred: "" }).map((e) => e.annId)).toEqual(["2", "3"]);
+    expect(filterErrors(errors, { yTrue: "car", yPred: "" }).map((e) => e.annId)).toEqual([
+      "2",
+      "3",
+    ]);
     expect(filterErrors(errors, { yTrue: "", yPred: "person" }).map((e) => e.annId)).toEqual(["2"]);
     expect(filterErrors(errors, { yTrue: "car", yPred: "dog" }).map((e) => e.annId)).toEqual(["3"]);
   });

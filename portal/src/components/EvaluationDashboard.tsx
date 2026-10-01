@@ -1,14 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import type {
+  CandidateSelectionResponse,
   EvaluationResponse,
   ListModelsResponse,
   ModelVersionInfo,
   TestEvaluation,
 } from "@/contracts";
 import { errorMessage, fetchJson } from "@/lib/ui/api-client";
-import { modelKey, pickDefaultModel } from "@/lib/ui/evaluation";
+import {
+  chooseDefaultModel,
+  type DefaultModelChoice,
+  isWinner,
+  modelKey,
+} from "@/lib/ui/evaluation";
 import { ClassMetricsTable } from "./ClassMetricsTable";
 import { ConfusionHeatmap } from "./ConfusionHeatmap";
 import { ErrorGallery } from "./ErrorGallery";
@@ -19,6 +26,45 @@ type Load<T> =
   | { state: "loading" }
   | { state: "error"; message: string }
   | { state: "ready"; data: T };
+
+interface ModelsData {
+  list: ModelVersionInfo[];
+  winnerRunId: string | null;
+  choice: DefaultModelChoice;
+}
+
+export function WinnerBadge() {
+  return <span className="badge status-succeeded">Ganador (T07)</span>;
+}
+
+/** Avisos sobre qué versión se abrió por defecto y por qué (sin cargar métricas de otras versiones). */
+export function DefaultModelNotice({
+  choice,
+  shownKey,
+}: {
+  choice: DefaultModelChoice;
+  shownKey: string | null;
+}) {
+  const notes: ReactNode[] = [];
+  if (choice.reason === "latest-ready") {
+    notes.push(
+      <p key="no-winner" className="state" role="status">
+        No hay candidato congelado en <code>reports/t07/selection.json</code> o su run no está
+        registrado como modelo; se muestra la versión READY más reciente (<code>{choice.key}</code>
+        ).
+      </p>,
+    );
+  }
+  if (choice.newerNonWinnerKey && choice.newerNonWinnerKey !== shownKey) {
+    notes.push(
+      <p key="newer" className="state" role="status">
+        Hay una versión más reciente (<code>{choice.newerNonWinnerKey}</code>) que no es la ganadora
+        y no tiene evaluación de test; compárala en <Link href="/experiments">/experiments</Link>.
+      </p>,
+    );
+  }
+  return notes.length ? <div className="stack">{notes}</div> : null;
+}
 
 /** Coherencia entre lo calculado desde predictions.csv y las métricas test_ de MLflow. */
 function ConsistencyNote({ test }: { test: TestEvaluation }) {
@@ -47,21 +93,34 @@ function ConsistencyNote({ test }: { test: TestEvaluation }) {
   );
 }
 
+/** Run del candidato congelado por T07; null si no hay selección o no se pudo leer. */
+async function fetchWinnerRunId(): Promise<string | null> {
+  try {
+    return (await fetchJson<CandidateSelectionResponse>("/api/experiments/selection")).runId;
+  } catch {
+    return null;
+  }
+}
+
 export function EvaluationDashboard({ initialModel }: { initialModel: string | null }) {
-  const [models, setModels] = useState<Load<ModelVersionInfo[]>>({ state: "loading" });
-  const [selected, setSelected] = useState<string | null>(initialModel);
+  const [models, setModels] = useState<Load<ModelsData>>({ state: "loading" });
+  const [selected, setSelected] = useState<string | null>(null);
   const [evaluation, setEvaluation] = useState<Load<EvaluationResponse> | null>(null);
 
   const fetchModels = useCallback(async () => {
     setModels({ state: "loading" });
     try {
-      const { models: list } = await fetchJson<ListModelsResponse>("/api/models");
-      setModels({ state: "ready", data: list });
-      setSelected((current) => current ?? pickDefaultModel(list));
+      const [{ models: list }, winnerRunId] = await Promise.all([
+        fetchJson<ListModelsResponse>("/api/models"),
+        fetchWinnerRunId(),
+      ]);
+      const choice = chooseDefaultModel(list, winnerRunId, initialModel);
+      setModels({ state: "ready", data: { list, winnerRunId, choice } });
+      setSelected((current) => current ?? choice.key);
     } catch (err) {
       setModels({ state: "error", message: errorMessage(err) });
     }
-  }, []);
+  }, [initialModel]);
 
   const fetchEvaluation = useCallback(async (key: string) => {
     setEvaluation({ state: "loading" });
@@ -87,7 +146,9 @@ export function EvaluationDashboard({ initialModel }: { initialModel: string | n
     return <StateMessage kind="loading" message="Cargando modelos publicados…" />;
   if (models.state === "error")
     return <StateMessage kind="error" message={models.message} onRetry={fetchModels} />;
-  if (models.data.length === 0) {
+
+  const { list, winnerRunId, choice } = models.data;
+  if (list.length === 0) {
     return (
       <StateMessage
         kind="empty"
@@ -95,20 +156,33 @@ export function EvaluationDashboard({ initialModel }: { initialModel: string | n
       />
     );
   }
+  const keys = list.map(modelKey);
+  const options = selected && !keys.includes(selected) ? [selected, ...keys] : keys;
+  const winnerOf = new Map(list.map((m) => [modelKey(m), isWinner(m.runId, winnerRunId)]));
 
   return (
     <div className="stack">
       <section className="card">
         <label htmlFor="model">Versión del modelo</label>
         <select id="model" value={selected ?? ""} onChange={(e) => setSelected(e.target.value)}>
-          {models.data.map((m) => (
-            <option key={modelKey(m)} value={modelKey(m)}>
-              {modelKey(m)}
+          {selected === null ? <option value="">Elige una versión</option> : null}
+          {options.map((key) => (
+            <option key={key} value={key}>
+              {key}
+              {winnerOf.get(key) ? " · Ganador (T07)" : ""}
             </option>
           ))}
         </select>
       </section>
 
+      <DefaultModelNotice choice={choice} shownKey={selected} />
+
+      {selected === null ? (
+        <StateMessage
+          kind="empty"
+          message="No hay un ganador (T07) registrado ni versiones en estado READY."
+        />
+      ) : null}
       {evaluation?.state === "loading" ? (
         <StateMessage kind="loading" message="Cargando evaluación…" />
       ) : null}
@@ -119,18 +193,27 @@ export function EvaluationDashboard({ initialModel }: { initialModel: string | n
           onRetry={() => selected && fetchEvaluation(selected)}
         />
       ) : null}
-      {evaluation?.state === "ready" ? <EvaluationView data={evaluation.data} /> : null}
+      {evaluation?.state === "ready" ? (
+        <EvaluationView data={evaluation.data} winnerRunId={winnerRunId} />
+      ) : null}
     </div>
   );
 }
 
-function EvaluationView({ data }: { data: EvaluationResponse }) {
+function EvaluationView({
+  data,
+  winnerRunId,
+}: {
+  data: EvaluationResponse;
+  winnerRunId: string | null;
+}) {
   const { test } = data;
+  const winner = isWinner(data.runId, winnerRunId);
   return (
     <>
       <header className="card">
         <h2>
-          {data.modelName}:{data.modelVersion}
+          {data.modelName}:{data.modelVersion} {winner ? <WinnerBadge /> : null}
         </h2>
         <p>
           Run de MLflow: <code>{data.runId ?? "—"}</code>
@@ -144,6 +227,12 @@ function EvaluationView({ data }: { data: EvaluationResponse }) {
             </span>
           ) : null}
         </p>
+        {!winner && winnerRunId ? (
+          <p className="muted">
+            Esta versión no es la ganadora (T07). El test se evalúa una sola vez y solo en el run
+            ganador; para comparar candidatos usa <Link href="/experiments">/experiments</Link>.
+          </p>
+        ) : null}
       </header>
 
       {test === null ? (
