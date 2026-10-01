@@ -4,6 +4,7 @@
  */
 
 export * from "./errors";
+export * from "./evaluation";
 export * from "./experiments";
 export * from "./models";
 export * from "./releases";

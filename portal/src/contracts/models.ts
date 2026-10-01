@@ -1,3 +1,5 @@
+import type { TestEvaluation } from "./evaluation";
+
 /**
  * Contrato de modelos y evaluación (T09), servido desde el Model Registry de MLflow.
  */
@@ -41,4 +43,6 @@ export interface EvaluationResponse {
   /** Matriz de confusión si el run la publicó como artefacto/param JSON. */
   confusionMatrix: number[][] | null;
   classes: string[] | null;
+  /** Evaluación de test calculada desde predictions.csv de T08; null si el run aún no se evalúa (T12). */
+  test: TestEvaluation | null;
 }
