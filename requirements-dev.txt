@@ -9,3 +9,4 @@
 -r ml/requirements.txt
 
 moto[s3]>=5.0,<6   # S3 simulado (mock_aws) para tests de publicación/inferencia
+dvc[s3]==3.67.1    # dvc pull del release del P2, recortes y manifiesto (README, paso 4)
