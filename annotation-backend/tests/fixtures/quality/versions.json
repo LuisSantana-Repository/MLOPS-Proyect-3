@@ -1,0 +1,51 @@
+{
+  "minimumImagesPerClass": 300,
+  "versions": [
+    {
+      "version": "v1.0.0",
+      "createdAt": "2026-09-10T12:00:00+00:00",
+      "commit": "abc1234",
+      "dvcRevision": "d3f1a0c9",
+      "parentVersion": null,
+      "environments": {
+        "dev": { "status": "pushed", "contentHash": "d3f1a0c9" },
+        "prod": { "status": "not_pushed", "contentHash": null }
+      },
+      "totals": { "images": 3020, "annotations": 28100, "categories": 3 },
+      "metrics": {
+        "smallObjectsPercent": 41.2,
+        "classImbalanceRatio": 1.08,
+        "duplicateGroups": 6,
+        "invalidBoxes": 0
+      },
+      "classCounts": [
+        { "categoryId": 1, "distinctImages": 1400 },
+        { "categoryId": 2, "distinctImages": 1300 },
+        { "categoryId": 3, "distinctImages": 320 }
+      ]
+    },
+    {
+      "version": "v1.1.0",
+      "createdAt": "2026-09-16T12:00:00+00:00",
+      "commit": "def5678",
+      "dvcRevision": "aa99be71",
+      "parentVersion": "v1.0.0",
+      "environments": {
+        "dev": { "status": "pushed", "contentHash": "aa99be71" },
+        "prod": { "status": "pushed", "contentHash": "aa99be71" }
+      },
+      "totals": { "images": 3390, "annotations": 30500, "categories": 3 },
+      "metrics": {
+        "smallObjectsPercent": 38.6,
+        "classImbalanceRatio": 1.07,
+        "duplicateGroups": 4,
+        "invalidBoxes": 0
+      },
+      "classCounts": [
+        { "categoryId": 1, "distinctImages": 1600 },
+        { "categoryId": 2, "distinctImages": 1500 },
+        { "categoryId": 3, "distinctImages": 290 }
+      ]
+    }
+  ]
+}

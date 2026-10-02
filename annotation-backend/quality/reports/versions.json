@@ -1,0 +1,89 @@
+{
+  "minimumImagesPerClass": 300,
+  "versions": [
+    {
+      "version": "v1.0.0",
+      "createdAt": "2026-09-18T20:52:16.278727Z",
+      "commit": "7e36ecc",
+      "dvcRevision": "2ae957bda56b5cf9293fd620b781e699",
+      "parentVersion": null,
+      "environments": {
+        "dev": {
+          "status": "pushed",
+          "contentHash": "2ae957bda56b5cf9293fd620b781e699"
+        },
+        "prod": {
+          "status": "pushed",
+          "contentHash": "2ae957bda56b5cf9293fd620b781e699"
+        }
+      },
+      "totals": {
+        "images": 689,
+        "annotations": 1455,
+        "categories": 3
+      },
+      "metrics": {
+        "smallObjectsPercent": 0.4123711340206186,
+        "classImbalanceRatio": 5.929577464788732,
+        "duplicateGroups": 1,
+        "invalidBoxes": 0
+      },
+      "classCounts": [
+        {
+          "categoryId": 1,
+          "distinctImages": 421
+        },
+        {
+          "categoryId": 2,
+          "distinctImages": 399
+        },
+        {
+          "categoryId": 3,
+          "distinctImages": 71
+        }
+      ]
+    },
+    {
+      "version": "v1.1.0",
+      "createdAt": "2026-09-19T03:06:11.894570Z",
+      "commit": "e4e33de",
+      "dvcRevision": "1fdb1dcea3218ad2fb0edf985984a929",
+      "parentVersion": "v1.0.0",
+      "environments": {
+        "dev": {
+          "status": "pushed",
+          "contentHash": "1fdb1dcea3218ad2fb0edf985984a929"
+        },
+        "prod": {
+          "status": "pushed",
+          "contentHash": "1fdb1dcea3218ad2fb0edf985984a929"
+        }
+      },
+      "totals": {
+        "images": 688,
+        "annotations": 1454,
+        "categories": 3
+      },
+      "metrics": {
+        "smallObjectsPercent": 0.41265474552957354,
+        "classImbalanceRatio": 5.929577464788732,
+        "duplicateGroups": 0,
+        "invalidBoxes": 0
+      },
+      "classCounts": [
+        {
+          "categoryId": 1,
+          "distinctImages": 421
+        },
+        {
+          "categoryId": 2,
+          "distinctImages": 399
+        },
+        {
+          "categoryId": 3,
+          "distinctImages": 71
+        }
+      ]
+    }
+  ]
+}

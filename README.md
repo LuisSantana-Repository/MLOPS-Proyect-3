@@ -6,7 +6,8 @@ un **portal Next.js** lanza y observa entrenamientos, y un **worker Python**
 para inferencia.
 
 ```text
-portal/     Portal Next.js (App Router, TypeScript, Biome, Vitest) — API del portal
+portal/     Portal ÚNICO (Next.js): anotación (P1) + calidad del dataset (P2) + modelo (P3)
+annotation-backend/  Backend del portal de anotación de los Proyectos 1 y 2 (Express + Drizzle)
 trainer/    Entrenador PyTorch (dataset, modelo, tracking MLflow, barridos)
 serving/    Publicación en S3 + servicio de inferencia FastAPI (T10)
 ml/         Recortes y manifiesto 70/20/10 sin fuga (split versionado con DVC)
@@ -91,8 +92,9 @@ curl -s http://localhost:5000/health        # MLflow → OK
 curl -s http://localhost:8000/health        # inferencia → {"status":"ok"}
 ```
 
-y `docker compose ps` muestra `db`, `minio`, `mlflow`, `redis`, `worker` e `inference`
-arriba (`createbuckets` termina con código 0). MinIO tiene consola en http://localhost:9001.
+y `docker compose ps` muestra `db`, `minio`, `mlflow`, `redis`, `worker`, `inference` y
+`annotation-api` arriba (`createbuckets` y `annotation-db-init` terminan con código 0).
+`curl -s http://localhost:3100/health` responde el backend del portal de anotación. MinIO tiene consola en http://localhost:9001.
 
 ### 4. Datos del release aprobado (DVC)
 
@@ -219,8 +221,18 @@ npm run db:migrate          # crea training_jobs, published_models y annotation_
 npm run dev                 # http://localhost:3000
 ```
 
+Es **un solo portal** (misma app, mismo menú, mismos pasos de arranque): las pantallas de
+anotación del Proyecto 1 (Tablero, Buscar, Subir fotografías, Anotar), las vistas de calidad
+del Proyecto 2 (Resumen, Analizadores, Analítica, Particiones, Versiones, Copilot,
+Configuración) y las cinco páginas del modelo. http://localhost:3000 abre el Tablero y el
+menú lateral lleva a todas. El código de esas pantallas vive en `portal/src/p2/`; su backend
+es el servicio `annotation-api` del compose (misma MariaDB y mismo MinIO, base `image_repo`)
+y el portal le reenvía `/api/p2/*`.
+
 | Página | Qué verificar |
 |---|---|
+| `/dashboard`, `/search`, `/upload` | Portal de anotación: subir una fotografía, buscarla y anotarla |
+| `/overview` … `/settings` | Vistas de calidad del dataset (leen `annotation-backend/quality/reports`) |
 | `/training` | Release `proyecto2 v1.1.0@dc9376e`, split 70/20/10 y lanzar un job (estado y logs persisten al recargar) |
 | `/experiments` | Las corridas de T07 con curvas train/val; el candidato marcado con ★ |
 | `/evaluation` | Abre la versión ganadora: accuracy 94.8 %, matriz y errores desde `predictions.csv` |
