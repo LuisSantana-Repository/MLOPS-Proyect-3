@@ -9,8 +9,9 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/releases
- * Releases DVC aprobados con su procedencia (hashes, commit del Proyecto 2)
- * y el split 70/20/10 de T04. Se leen de los artefactos versionados en Git.
+ * Releases del Proyecto 2 con compuerta de calidad APROBADA: procedencia (hashes, commit),
+ * evidencia de la compuerta (reporte y política) y el split 70/20/10 de T04.
+ * Un release con compuerta fallida o sin reporte no aparece.
  */
 export async function GET(): Promise<NextResponse> {
   try {

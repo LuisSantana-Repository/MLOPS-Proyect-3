@@ -6,7 +6,8 @@ import {
   SPLIT_NAMES,
   type SplitCounts,
 } from "@/contracts";
-import { ApiError, notFound } from "@/lib/http";
+import { ApiError, badRequest, notFound } from "@/lib/http";
+import { evaluateQualityGate } from "@/lib/release-gate";
 
 /**
  * Lee los artefactos versionados en Git por T03/T04/T07 (ver `contracts/releases.ts`).
@@ -111,14 +112,37 @@ interface LeakageReportFile {
   test_huella_sha256?: string;
 }
 
-/** Releases aprobados (hoy uno: el que T03 congeló en release_info.json). */
-export async function readApprovedReleases(root: string): Promise<ApprovedRelease[]> {
+export type ReleaseDecision =
+  | { approved: true; tag: string; release: ApprovedRelease }
+  | { approved: false; tag: string; reason: string };
+
+/**
+ * Evalúa el release con el que T03 generó los recortes (release_info.json):
+ * debe pasar la compuerta de calidad del Proyecto 2 y tener su manifiesto 70/20/10
+ * versionado y sin fuga.
+ */
+export async function evaluateRelease(root: string): Promise<ReleaseDecision> {
   const info = await readJson<ReleaseInfoFile>(root, ARTIFACTS.releaseInfo);
   if (!info) throw notFound(`No hay release aprobado: falta ${ARTIFACTS.releaseInfo}`);
+  const tag = info.release_tag;
+  const rejected = (reason: string): ReleaseDecision => ({ approved: false, tag, reason });
+
+  const gate = await evaluateQualityGate(root, tag, dvcMd5(info.dvc_file_content ?? null));
+  if (!gate.approved) return rejected(gate.reason);
 
   const splitText = await readText(root, ARTIFACTS.splitReport);
-  if (splitText === null)
-    throw notFound(`El release no tiene split: falta ${ARTIFACTS.splitReport}`);
+  const manifestMd5 = dvcMd5(await readText(root, ARTIFACTS.manifestDvc));
+  if (splitText === null || !manifestMd5) {
+    return rejected(`falta su manifiesto 70/20/10 (${ARTIFACTS.manifestDvc})`);
+  }
+  const leakage = await readJson<LeakageReportFile>(root, ARTIFACTS.leakageReport);
+  if (leakage?.fuga?.total !== 0) {
+    return rejected(
+      leakage
+        ? `su manifiesto tiene fuga entre particiones (${leakage.fuga?.total})`
+        : "falta el reporte de fuga del manifiesto",
+    );
+  }
 
   const classesFile = await readJson<Record<string, string> | string[]>(root, ARTIFACTS.classes);
   const classes = Array.isArray(classesFile)
@@ -126,26 +150,61 @@ export async function readApprovedReleases(root: string): Promise<ApprovedReleas
     : Object.entries(classesFile ?? {})
         .sort(([a], [b]) => Number(a) - Number(b))
         .map(([, name]) => name);
-  const leakage = await readJson<LeakageReportFile>(root, ARTIFACTS.leakageReport);
 
-  return [
-    {
-      tag: info.release_tag,
+  return {
+    approved: true,
+    tag,
+    release: {
+      tag,
       provenance: {
         sourceCommit: sourceCommit(info.dvc_file_content),
         annotationsMd5: info.annotations_md5,
-        manifestMd5: dvcMd5(await readText(root, ARTIFACTS.manifestDvc)),
+        manifestMd5,
         cropsMd5: dvcMd5(await readText(root, ARTIFACTS.cropsDvc)),
       },
+      quality: gate.evidence,
       classes,
       split: {
-        seed: leakage?.semilla ?? null,
+        seed: leakage.semilla ?? null,
         ...parseSplitReport(splitText),
-        leakage: leakage?.fuga?.total ?? null,
-        testFingerprint: leakage?.test_huella_sha256 ?? null,
+        leakage: 0,
+        testFingerprint: leakage.test_huella_sha256 ?? null,
       },
     },
-  ];
+  };
+}
+
+/** Releases con compuerta de calidad aprobada y manifiesto sin fuga (P1-1). */
+export async function readApprovedReleases(root: string): Promise<ApprovedRelease[]> {
+  const decision = await evaluateRelease(root);
+  return decision.approved ? [decision.release] : [];
+}
+
+/**
+ * Valida el release de un job ANTES de crearlo: debe existir y estar aprobado.
+ * Lanza 400 con el motivo; así un release no aprobado nunca llega a `training_jobs`.
+ */
+export async function requireApprovedRelease(root: string, tag: string): Promise<ApprovedRelease> {
+  let decision: ReleaseDecision;
+  try {
+    decision = await evaluateRelease(root);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      throw badRequest("No hay ningún release aprobado para entrenar", { release: [err.message] });
+    }
+    throw err;
+  }
+  if (decision.tag !== tag) {
+    throw badRequest(`El release "${tag}" no existe entre los releases del Proyecto 2`, {
+      release: [`Release desconocido. Disponible: ${decision.tag}`],
+    });
+  }
+  if (!decision.approved) {
+    throw badRequest(`El release "${tag}" no está aprobado: ${decision.reason}`, {
+      release: [decision.reason],
+    });
+  }
+  return decision.release;
 }
 
 interface SelectionFile {
