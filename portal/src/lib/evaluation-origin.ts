@@ -6,21 +6,20 @@ import { type ApiError, badRequest, conflict, notFound } from "@/lib/http";
 import { getModelVersion, getRun, type NormalizedRun } from "@/lib/mlflow";
 import { readPublishedRow } from "@/lib/published-models";
 import { computeTestEvaluation, parsePredictionsCsv } from "./evaluation-metrics";
-import {
-  fetchMlflowArtifact,
-  loadTestEvaluation,
-  PREDICTIONS_ARTIFACT,
-  REPO_REPORT_DIR,
-} from "./test-evaluation";
+import { fetchMlflowArtifact, PREDICTIONS_ARTIFACT, REPO_REPORT_DIR } from "./test-evaluation";
 
 /**
  * De dónde sale la evaluación de una versión de modelo (P1-3).
  *
  * 1. **MLflow** (fuente principal): el run de origen y su `test/predictions.csv`.
- * 2. **Repo verificado** (respaldo): si el run no se puede consultar en MLflow, se usan
- *    los artefactos versionados de `reports/t08/`, pero SOLO si son de la misma versión
- *    publicada: mismo `run_id` y mismo `weights_sha256`. Si el hash no coincide es 409:
- *    esos resultados son de otros pesos y no se muestran.
+ * 2. **Repo verificado** (respaldo): si el run no se puede consultar en MLflow, o está
+ *    pero sin su `test/predictions.csv`, se usan los artefactos versionados de
+ *    `reports/t08/`, pero SOLO si son de la misma versión publicada: mismo `run_id` y
+ *    mismo `weights_sha256`. Si el hash no coincide es 409: esos resultados son de otros
+ *    pesos y no se muestran. Es el único camino hacia `reports/t08`.
+ *
+ * Las versiones enteras del Model Registry no tienen hash publicado con qué verificar,
+ * así que no tienen respaldo: sin artefacto en MLflow, su evaluación de test es `null`.
  *
  * En ambos casos se mantiene la regla de T07/T08: no hay resultados de test sin
  * `reports/t07/selection.json` del mismo run con `test_split_used=false`.
@@ -213,17 +212,64 @@ export async function loadEvaluation(
   const { run, error } = await tryGetRun(origin.runId);
 
   if (run) {
+    const runId = origin.runId ?? run.runId;
     const { confusionMatrix, classes } = confusionAndClasses(run);
-    const test = await loadTestEvaluation(origin.runId ?? run.runId, run.metrics);
+
+    // predictions.csv del run. Solo se pide si T08 ya registró métricas de test.
+    let csv: string | null = null;
+    let artifactError: ApiError | null = null;
+    if (typeof run.metrics.test_accuracy === "number") {
+      try {
+        csv = await fetchMlflowArtifact(runId, PREDICTIONS_ARTIFACT);
+      } catch (err) {
+        artifactError = err as ApiError;
+      }
+    }
+
+    if (csv !== null) {
+      const parsed = parsePredictionsCsv(csv);
+      const test = computeTestEvaluation(parsed.classes, parsed.rows, run.metrics, "mlflow");
+      return {
+        modelName: name,
+        modelVersion: version,
+        runId: origin.runId,
+        source: "mlflow",
+        metrics: evaluationMetrics(run.metrics),
+        confusionMatrix: confusionMatrix ?? test.confusionMatrix.matrix,
+        classes: classes ?? test.confusionMatrix.labels,
+        test,
+      };
+    }
+
+    // El run está en MLflow pero sin predicciones de test: mismo respaldo verificado que
+    // cuando el run no está (409 si es de otros pesos o falta la selección de T07).
+    const report = await readVerifiedRepoReport(root, origin);
+    if (report) {
+      const logged = { ...report.logged, ...run.metrics };
+      const parsed = parsePredictionsCsv(report.predictionsCsv);
+      const test = computeTestEvaluation(parsed.classes, parsed.rows, logged, "repo");
+      return {
+        modelName: name,
+        modelVersion: version,
+        runId: origin.runId,
+        source: "repo",
+        metrics: evaluationMetrics(logged),
+        confusionMatrix: confusionMatrix ?? test.confusionMatrix.matrix,
+        classes: classes ?? test.confusionMatrix.labels,
+        test,
+      };
+    }
+    if (artifactError) throw artifactError;
+
     return {
       modelName: name,
       modelVersion: version,
       runId: origin.runId,
       source: "mlflow",
       metrics: evaluationMetrics(run.metrics),
-      confusionMatrix: confusionMatrix ?? test?.confusionMatrix.matrix ?? null,
-      classes: classes ?? test?.confusionMatrix.labels ?? null,
-      test,
+      confusionMatrix,
+      classes,
+      test: null,
     };
   }
 

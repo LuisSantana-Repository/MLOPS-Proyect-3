@@ -15,6 +15,16 @@ con métricas») cuando el run no estaba en MLflow, aunque `reports/t08/` tuvier
 | La respuesta trae `source`: `"mlflow"` o `"repo"`; la página lo muestra como «MLflow» o «repo verificado» | `portal/src/contracts/models.ts`, `EvaluationSource` en `EvaluationDashboard.tsx` |
 | Exportar `predictions.csv` desde la página | `GET /api/evaluation/[modelVersion]/predictions` |
 
+**Un solo camino hacia `reports/t08`.** El respaldo verificado se usa en los dos casos en
+que MLflow no puede dar las predicciones: el run no está, o está pero sin su
+`test/predictions.csv` (por ejemplo, importado sin la carpeta `test/` o sin métricas
+`test_*`). En ambos se exige mismo run, mismo SHA-256 de pesos y la selección de T07, y la
+respuesta dice `source: "repo"`. Se eliminó el respaldo anterior que solo comparaba el
+`run_id` (`readRepoPredictions` / `loadTestEvaluation`).
+
+Las versiones enteras del Model Registry no tienen hash publicado con qué verificar, así que
+no tienen respaldo: sin artefacto en MLflow, su evaluación de test es `null`.
+
 En el respaldo, las métricas "registradas" con las que se comparan las cifras calculadas
 desde el CSV son las de `reports/t08/metrics.json` y `classification_report.json`.
 
@@ -26,6 +36,8 @@ desde el CSV son las de `reports/t08/metrics.json` y `classification_report.json
   2. Respaldo válido → `source: "repo"`, 135 muestras, accuracy 128/135 = 0.948148, y la
      galería con los **7 errores** (recorte, etiqueta real y predicción).
   3. Respaldo con hash distinto → 409.
+  4. Run en MLflow **sin** predicciones de test: mismos pesos → `source: "repo"`; pesos
+     distintos → 409 (con y sin métricas `test_*`).
   Más: MLflow caído usa el respaldo; reporte de otro run sigue siendo 404; exportación del CSV.
 - `portal/src/lib/evaluation-origin.test.ts` — reglas del respaldo (hash, run, selección).
 - `portal/src/components/evaluation-source.test.tsx` — la página indica la fuente y enlaza la exportación.
