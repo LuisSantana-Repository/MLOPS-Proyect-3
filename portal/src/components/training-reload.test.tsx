@@ -103,6 +103,23 @@ describe("Actividad A: el job sobrevive a la recarga", () => {
     render(<TrainingDashboard />);
 
     expect(await screen.findByText(/terminado: best_val_loss=0.3000/)).toBeInTheDocument();
+    // El id recuperado también queda en la URL, para poder compartir o recargar el enlace.
+    expect(window.location.search).toBe(`?job=${JOB_ID}`);
+  });
+
+  it("si el navegador bloquea localStorage, la página no truena y ?job= sigue funcionando", async () => {
+    const blocked = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    });
+    window.history.replaceState(null, "", `/training?job=${JOB_ID}`);
+
+    try {
+      render(<TrainingDashboard />);
+      expect(await screen.findByText(/época 1: val_loss=0.3000/)).toBeInTheDocument();
+      expect(blocked).toHaveBeenCalled();
+    } finally {
+      blocked.mockRestore();
+    }
   });
 
   it("sin job previo no muestra el panel de progreso", async () => {

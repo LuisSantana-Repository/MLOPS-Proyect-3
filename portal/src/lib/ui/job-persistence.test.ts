@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  browserStorage,
   JOB_STORAGE_KEY,
   jobIdFromSearch,
   recoverJobId,
@@ -70,5 +71,25 @@ describe("recuperar el job al cargar la página", () => {
     };
     expect(recoverJobId("", blocked)).toBeNull();
     expect(() => rememberJobId(ID, blocked)).not.toThrow();
+  });
+});
+
+describe("browserStorage", () => {
+  it("devuelve null si leer window.localStorage lanza (navegador que lo bloquea)", () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, "window");
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        get localStorage(): never {
+          throw new Error("SecurityError");
+        },
+      },
+    });
+    try {
+      expect(browserStorage()).toBeNull();
+    } finally {
+      if (original) Object.defineProperty(globalThis, "window", original);
+      else Reflect.deleteProperty(globalThis, "window");
+    }
   });
 });
