@@ -273,6 +273,50 @@ describe("P1-1: compuerta de calidad del Proyecto 2", () => {
   });
 });
 
+describe("Actividad A (1.1): los dos releases reales del repo", () => {
+  const repo = resolve(process.cwd(), "..");
+
+  it("el repo ofrece v1.1.0 y v1.0.0, cada uno con su compuerta, sus conteos y su manifiesto", async () => {
+    const releases = await readApprovedReleases(repo);
+    expect(releases.map((r) => r.tag)).toEqual([
+      "proyecto2 v1.1.0@dc9376e",
+      "proyecto2 v1.0.0@9c0b9a4",
+    ]);
+    const [current, previous] = releases;
+
+    // v1.0.0: reporte oficial de su compuerta y datos de ese release en el registro del P2.
+    expect(previous.quality).toMatchObject({
+      status: "pass",
+      exitCode: 0,
+      version: "v1.0.0",
+      dataHash: "2ae957bda56b5cf9293fd620b781e699",
+      reportFile: "annotation-backend/quality/releases/v1.0.0/release.json",
+      reportMd5: "da513805a74302569a3e980b8184f310",
+    });
+    expect(previous.provenance.annotationsMd5).toBe("fb3118e0aaa6aece8b70417d76b8eba7");
+
+    // Manifiesto derivado propio, en una ruta aparte: el entregado no se toca.
+    expect(current.provenance.manifestMd5).toBe("e75a07ce3b75455514f044b23e0d1b29");
+    expect(current.paths.manifest).toBe("data/splits/manifest.csv");
+    expect(previous.paths.manifest).toBe("data/releases/v1.0.0/splits/manifest.csv");
+    expect(previous.provenance.manifestMd5).toMatch(/^[0-9a-f]{32}$/);
+    expect(previous.provenance.manifestMd5).not.toBe(current.provenance.manifestMd5);
+    expect(previous.provenance.cropsMd5).not.toBe(current.provenance.cropsMd5);
+
+    // Al cambiar de release cambian los conteos; ambos son 70/20/10 sin fuga.
+    expect(current.split.totals).toEqual({ train: 944, val: 270, test: 135, total: 1349 });
+    expect(previous.split.totals).not.toEqual(current.split.totals);
+    const { train, val, test, total } = previous.split.totals;
+    expect(train + val + test).toBe(total);
+    expect(train / total).toBeGreaterThan(0.68);
+    expect(train / total).toBeLessThan(0.72);
+    expect(test / total).toBeGreaterThan(0.08);
+    expect(test / total).toBeLessThan(0.12);
+    expect(previous.split.leakage).toBe(0);
+    expect(previous.classes).toEqual(["person", "car"]);
+  });
+});
+
 describe("Actividad A (1.1): varios releases aprobados", () => {
   const V110 = "proyecto2 v1.1.0@dc9376e";
   const V100 = "proyecto2 v1.0.0@9c0b9a4";
