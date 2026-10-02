@@ -70,7 +70,7 @@ def test_copy_keeps_the_model_registry_and_its_alias(source: tuple[str, str], tm
 
     client = MlflowClient(sqlite_uri(dst))
     version = client.get_model_version_by_alias("clasificador", "champion")
-    assert version.version == "1"
+    assert str(version.version) == "1"
     assert version.run_id == rid
     assert version.tags == {"semver": "1.0.0"}
 
