@@ -13,6 +13,11 @@ export function evaluationHref(model: Pick<ModelVersionInfo, "name" | "version">
   return `/evaluation?model=${encodeURIComponent(`${model.name}:${model.version}`)}`;
 }
 
+/** Descarga de predictions.csv de test de una versión (P1-3). */
+export function predictionsExportHref(model: Pick<ModelVersionInfo, "name" | "version">): string {
+  return `/api/evaluation/${encodeURIComponent(`${model.name}:${model.version}`)}/predictions`;
+}
+
 export function modelsHref(version: string): string {
   return `/models?version=${encodeURIComponent(version)}`;
 }
