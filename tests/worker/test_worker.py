@@ -343,3 +343,29 @@ def test_job_real_crea_un_run_en_el_experimento_del_portal(tmp_path, monkeypatch
     assert run.data.tags["job_id"] == JOB_ID
     assert len(MlflowClient(uri).get_metric_history(run_id, "val_loss")) == 2  # curvas por época
     assert len([m for _, m in store.logs if m.startswith("época")]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Commit del código de la imagen (P2-2): runs con git_commit de HEAD, no de una imagen vieja
+# ---------------------------------------------------------------------------
+
+HEAD = "3a85a81" + "0" * 33
+OLD = "ba2ee94" + "0" * 33
+
+
+def test_startup_fails_when_the_image_was_built_from_another_commit() -> None:
+    with pytest.raises(SystemExit, match="docker compose up -d --build"):
+        worker.check_code_commit(baked=OLD, expected=HEAD)
+
+
+def test_startup_accepts_an_image_built_from_head() -> None:
+    assert worker.check_code_commit(baked=HEAD, expected=HEAD) == HEAD
+
+
+@pytest.mark.parametrize(("baked", "expected"), [(HEAD, ""), ("no disponible", HEAD), ("no disponible", "")])
+def test_startup_warns_when_the_commit_cannot_be_compared(
+    baked: str, expected: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level("WARNING", logger="worker"):
+        assert worker.check_code_commit(baked=baked, expected=expected) == baked
+    assert "GIT_COMMIT" in caplog.text
