@@ -96,7 +96,7 @@ export function modelStore(): S3Store {
   return store;
 }
 
-/** Bucket de MinIO para imágenes de la cola de anotación. */
+/** Bucket de MinIO para las imágenes subidas desde /inference. */
 export function annotationStore(): S3Store {
   globalForS3.__annotationStore ??= {
     bucket: env.ANNOTATION_BUCKET,

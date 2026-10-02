@@ -1,0 +1,437 @@
+{
+  "schema_version": 1,
+  "dataset_version": "v1.0.0-demo",
+  "generated_at": "2026-09-18T00:00:00+00:00",
+  "seed": 42,
+  "totals": {
+    "images": 12,
+    "annotations": 15,
+    "categories": 3
+  },
+  "categories": [
+    {
+      "id": 1,
+      "name": "person"
+    },
+    {
+      "id": 2,
+      "name": "car"
+    },
+    {
+      "id": 3,
+      "name": "dog"
+    }
+  ],
+  "quality": {
+    "checks": [
+      {
+        "name": "min_images_per_class",
+        "status": "pass",
+        "severity": "fail",
+        "threshold": 5.0,
+        "observed": {
+          "classes_meeting_threshold": 2,
+          "min_classes_required": 2
+        },
+        "samples": []
+      },
+      {
+        "name": "invalid_boxes",
+        "status": "fail",
+        "severity": "fail",
+        "threshold": 0.0,
+        "observed": {
+          "invalid_count": 1,
+          "total_annotations": 15
+        },
+        "samples": [
+          {
+            "annotation_id": 15,
+            "image_id": 10,
+            "bbox": [
+              200.0,
+              300.0,
+              0.0,
+              80.0
+            ],
+            "reasons": [
+              "zero_or_negative_size"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "class_imbalance",
+        "status": "pass",
+        "severity": "warn",
+        "threshold": 10.0,
+        "observed": {
+          "ratio": 2.0,
+          "majority_category_id": 1,
+          "minority_category_id": 3
+        },
+        "samples": []
+      },
+      {
+        "name": "duplicates",
+        "status": "warn",
+        "severity": "warn",
+        "threshold": 8.0,
+        "observed": {
+          "group_count": 1,
+          "pair_count": 1
+        },
+        "samples": [
+          {
+            "image_id_a": 11,
+            "image_id_b": 12,
+            "distance": 0,
+            "similarity_percent": 100.0
+          }
+        ]
+      },
+      {
+        "name": "small_objects",
+        "status": "pass",
+        "severity": "warn",
+        "threshold": 32.0,
+        "observed": {
+          "small_percent": 13.333333333333334,
+          "percent_by_category": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 50.0
+          },
+          "most_affected_category_id": 3
+        },
+        "samples": [
+          {
+            "annotation_id": 14,
+            "image_id": 9,
+            "category_id": 3,
+            "width": 12.0,
+            "height": 10.0
+          },
+          {
+            "annotation_id": 15,
+            "image_id": 10,
+            "category_id": 3,
+            "width": 0.0,
+            "height": 80.0
+          }
+        ]
+      },
+      {
+        "name": "spatial_bias",
+        "status": "pass",
+        "severity": "warn",
+        "threshold": 0.5,
+        "observed": {
+          "global_stats": {
+            "count": 15,
+            "mean_x": 0.4032291666666667,
+            "mean_y": 0.6347222222222222,
+            "median_x": 0.3125,
+            "median_y": 0.7083333333333334,
+            "std_x": 0.19626742944983822,
+            "std_y": 0.1980250677796521,
+            "p25_x": 0.2734375,
+            "p75_x": 0.53125,
+            "p25_y": 0.4479166666666667,
+            "p75_y": 0.8125
+          },
+          "stats_by_category": {
+            "1": {
+              "count": 6,
+              "mean_x": 0.3059895833333333,
+              "mean_y": 0.5138888888888888,
+              "median_x": 0.27734375,
+              "median_y": 0.4635416666666667,
+              "std_x": 0.12011674641405012,
+              "std_y": 0.08872869679986552,
+              "p25_x": 0.21875,
+              "p75_x": 0.3984375,
+              "p25_y": 0.4479166666666667,
+              "p75_y": 0.6041666666666666
+            },
+            "2": {
+              "count": 5,
+              "mean_x": 0.409375,
+              "mean_y": 0.7833333333333333,
+              "median_x": 0.2734375,
+              "median_y": 0.78125,
+              "std_x": 0.18597032273322536,
+              "std_y": 0.03047653924651625,
+              "p25_x": 0.2734375,
+              "p75_x": 0.53125,
+              "p25_y": 0.78125,
+              "p75_y": 0.8125
+            },
+            "3": {
+              "count": 4,
+              "mean_x": 0.54140625,
+              "mean_y": 0.6302083333333334,
+              "median_x": 0.53125,
+              "median_y": 0.765625,
+              "std_x": 0.21507374053377018,
+              "std_y": 0.2907817677543304,
+              "p25_x": 0.3125,
+              "p75_x": 0.71875,
+              "p25_y": 0.13541666666666666,
+              "p75_y": 0.8229166666666666
+            }
+          }
+        },
+        "samples": []
+      }
+    ],
+    "overall_status": "fail",
+    "exit_code": 1
+  },
+  "analyzers": {
+    "small_objects": {
+      "threshold_px": 32.0,
+      "severity": "warn",
+      "total_annotations": 15,
+      "small_count": 2,
+      "small_percent": 13.333333333333334,
+      "percent_by_category": {
+        "1": 0.0,
+        "2": 0.0,
+        "3": 50.0
+      },
+      "most_affected_category_id": 3,
+      "offending_samples": [
+        {
+          "annotation_id": 14,
+          "image_id": 9,
+          "category_id": 3,
+          "width": 12.0,
+          "height": 10.0
+        },
+        {
+          "annotation_id": 15,
+          "image_id": 10,
+          "category_id": 3,
+          "width": 0.0,
+          "height": 80.0
+        }
+      ]
+    },
+    "class_imbalance": {
+      "threshold": 10.0,
+      "severity": "warn",
+      "distributions": [
+        {
+          "category_id": 1,
+          "distinct_image_count": 6,
+          "box_count": 6
+        },
+        {
+          "category_id": 2,
+          "distinct_image_count": 5,
+          "box_count": 5
+        },
+        {
+          "category_id": 3,
+          "distinct_image_count": 3,
+          "box_count": 4
+        }
+      ],
+      "majority_category_id": 1,
+      "minority_category_id": 3,
+      "ratio": 2.0,
+      "classes_below_min_images": [
+        3
+      ]
+    },
+    "duplicates": {
+      "threshold": 8.0,
+      "severity": "warn",
+      "pairs": [
+        {
+          "image_id_a": 11,
+          "image_id_b": 12,
+          "distance": 0,
+          "similarity_percent": 100.0
+        }
+      ],
+      "duplicate_groups": [
+        [
+          11,
+          12
+        ]
+      ]
+    },
+    "invalid_boxes": {
+      "threshold": 0.0,
+      "severity": "fail",
+      "total_annotations": 15,
+      "invalid_count": 1,
+      "invalid_boxes": [
+        {
+          "annotation_id": 15,
+          "image_id": 10,
+          "bbox": [
+            200.0,
+            300.0,
+            0.0,
+            80.0
+          ],
+          "reasons": [
+            "zero_or_negative_size"
+          ]
+        }
+      ]
+    },
+    "spatial_bias": {
+      "threshold": 0.5,
+      "severity": "warn",
+      "global_stats": {
+        "count": 15,
+        "mean_x": 0.4032291666666667,
+        "mean_y": 0.6347222222222222,
+        "median_x": 0.3125,
+        "median_y": 0.7083333333333334,
+        "std_x": 0.19626742944983822,
+        "std_y": 0.1980250677796521,
+        "p25_x": 0.2734375,
+        "p75_x": 0.53125,
+        "p25_y": 0.4479166666666667,
+        "p75_y": 0.8125
+      },
+      "stats_by_category": {
+        "1": {
+          "count": 6,
+          "mean_x": 0.3059895833333333,
+          "mean_y": 0.5138888888888888,
+          "median_x": 0.27734375,
+          "median_y": 0.4635416666666667,
+          "std_x": 0.12011674641405012,
+          "std_y": 0.08872869679986552,
+          "p25_x": 0.21875,
+          "p75_x": 0.3984375,
+          "p25_y": 0.4479166666666667,
+          "p75_y": 0.6041666666666666
+        },
+        "2": {
+          "count": 5,
+          "mean_x": 0.409375,
+          "mean_y": 0.7833333333333333,
+          "median_x": 0.2734375,
+          "median_y": 0.78125,
+          "std_x": 0.18597032273322536,
+          "std_y": 0.03047653924651625,
+          "p25_x": 0.2734375,
+          "p75_x": 0.53125,
+          "p25_y": 0.78125,
+          "p75_y": 0.8125
+        },
+        "3": {
+          "count": 4,
+          "mean_x": 0.54140625,
+          "mean_y": 0.6302083333333334,
+          "median_x": 0.53125,
+          "median_y": 0.765625,
+          "std_x": 0.21507374053377018,
+          "std_y": 0.2907817677543304,
+          "p25_x": 0.3125,
+          "p75_x": 0.71875,
+          "p25_y": 0.13541666666666666,
+          "p75_y": 0.8229166666666666
+        }
+      }
+    }
+  },
+  "class_counts": [
+    {
+      "category_id": 1,
+      "distinct_images_before": 6,
+      "distinct_images_after": 5
+    },
+    {
+      "category_id": 2,
+      "distinct_images_before": 5,
+      "distinct_images_after": 4
+    },
+    {
+      "category_id": 3,
+      "distinct_images_before": 3,
+      "distinct_images_after": 3
+    }
+  ],
+  "splits": {
+    "seed": 42,
+    "proportions": {
+      "train": 0.7,
+      "val": 0.15,
+      "test": 0.15
+    },
+    "assignment": {
+      "train": [
+        1,
+        2,
+        5,
+        10,
+        11,
+        12
+      ],
+      "val": [
+        4,
+        6,
+        8
+      ],
+      "test": [
+        3,
+        7,
+        9
+      ]
+    },
+    "distribution": [
+      {
+        "split": "train",
+        "total_images": 6,
+        "category_counts": {
+          "1": 4,
+          "2": 3,
+          "3": 1
+        }
+      },
+      {
+        "split": "val",
+        "total_images": 3,
+        "category_counts": {
+          "1": 1,
+          "2": 1,
+          "3": 1
+        }
+      },
+      {
+        "split": "test",
+        "total_images": 3,
+        "category_counts": {
+          "1": 1,
+          "2": 1,
+          "3": 1
+        }
+      }
+    ],
+    "leakage": {
+      "id_intersection_size": 0,
+      "cross_split_duplicate_pairs": 0,
+      "duplicate_groups_within_one_split": 1,
+      "leaked_image_ids": [],
+      "all_classes_in_val": true,
+      "all_classes_in_test": true
+    }
+  },
+  "reannotation_queue": [
+    {
+      "annotation_id": 15,
+      "image_id": 10,
+      "reason": "zero_or_negative_size",
+      "analyzer": "invalid_boxes",
+      "severity": "fail"
+    }
+  ]
+}

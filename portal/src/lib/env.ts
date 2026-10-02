@@ -58,7 +58,7 @@ export const env = {
   MODELS_AWS_SECRET_ACCESS_KEY:
     process.env.MODELS_AWS_SECRET_ACCESS_KEY?.trim() || process.env.AWS_SECRET_ACCESS_KEY?.trim(),
 
-  // MinIO del stack: imágenes subidas desde /inference para la cola de anotación.
+  // MinIO del stack: imágenes subidas desde /inference (antes de enviarlas a anotación).
   MINIO_ENDPOINT: (process.env.MINIO_ENDPOINT?.trim() || "http://127.0.0.1:9000").replace(
     /\/$/,
     "",
@@ -66,6 +66,14 @@ export const env = {
   MINIO_ACCESS_KEY: process.env.MINIO_ACCESS_KEY?.trim() || process.env.MINIO_ROOT_USER?.trim(),
   MINIO_SECRET_KEY: process.env.MINIO_SECRET_KEY?.trim() || process.env.MINIO_ROOT_PASSWORD?.trim(),
   ANNOTATION_BUCKET: process.env.ANNOTATION_BUCKET?.trim() || "annotation-images",
+
+  // Backend del portal de anotación (servicio `annotation-api` del compose). Es el mismo
+  // al que next.config.mjs reenvía /api/p2/*; aquí lo llama el servidor del portal.
+  ANNOTATION_API_URL: (process.env.P2_BACKEND_URL?.trim() || "http://127.0.0.1:3100").replace(
+    /\/+$/,
+    "",
+  ),
+  ANNOTATION_API_TIMEOUT_MS: num(process.env.ANNOTATION_API_TIMEOUT_MS, 30_000),
 
   // Raíz del repo, donde viven los artefactos versionados de T03/T04/T07.
   // `npm run dev` corre dentro de portal/, así que por defecto es la carpeta padre.

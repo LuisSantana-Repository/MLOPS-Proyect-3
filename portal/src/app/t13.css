@@ -1,6 +1,6 @@
 /* Estilos de Models, Inference y Cola de anotación (T13). */
 
-button.link {
+:where(.p3) button.link {
   background: none;
   border: none;
   padding: 0;

@@ -22,6 +22,13 @@
       "when": 1790829703549,
       "tag": "0002_annotation_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1790905956366,
+      "tag": "0003_drop_annotation_queue",
+      "breakpoints": true
     }
   ]
 }

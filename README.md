@@ -6,7 +6,8 @@ un **portal Next.js** lanza y observa entrenamientos, y un **worker Python**
 para inferencia.
 
 ```text
-portal/     Portal Next.js (App Router, TypeScript, Biome, Vitest) — API del portal
+portal/     Portal ÚNICO (Next.js): anotación (P1) + calidad del dataset (P2) + modelo (P3)
+annotation-backend/  Backend del portal de anotación de los Proyectos 1 y 2 (Express + Drizzle)
 trainer/    Entrenador PyTorch (dataset, modelo, tracking MLflow, barridos)
 serving/    Publicación en S3 + servicio de inferencia FastAPI (T10)
 ml/         Recortes y manifiesto 70/20/10 sin fuga (split versionado con DVC)
@@ -26,7 +27,7 @@ El flujo completo, y la tarea que produce cada pieza:
 ```text
 release DVC del Proyecto 2 ─► recortes (T03) ─► manifiesto 70/20/10 (T04) ─► entrenamiento (T05/T06)
   ─► 10 corridas en MLflow + candidato por validación (T07) ─► evaluación única en test (T08)
-  ─► versión + tarjeta en AWS S3 (T10/T15) ─► Models / Inference / cola de anotación en el portal (T13)
+  ─► versión + tarjeta en AWS S3 (T10/T15) ─► Models / Inference en el portal (T13) ─► anotación (P1)
 ```
 
 ## Requisitos
@@ -91,8 +92,9 @@ curl -s http://localhost:5000/health        # MLflow → OK
 curl -s http://localhost:8000/health        # inferencia → {"status":"ok"}
 ```
 
-y `docker compose ps` muestra `db`, `minio`, `mlflow`, `redis`, `worker` e `inference`
-arriba (`createbuckets` termina con código 0). MinIO tiene consola en http://localhost:9001.
+y `docker compose ps` muestra `db`, `minio`, `mlflow`, `redis`, `worker`, `inference` y
+`annotation-api` arriba (`createbuckets` y `annotation-db-init` terminan con código 0).
+`curl -s http://localhost:3100/health` responde el backend del portal de anotación. MinIO tiene consola en http://localhost:9001.
 
 ### 4. Datos del release aprobado (DVC)
 
@@ -215,22 +217,32 @@ escribe la fila en `published_models`. **Comprobación:** imprime
 cd portal
 cp .env.example .env        # MYSQL_* y MINIO_* iguales al .env raíz; S3_BUCKET y MODELS_AWS_* del bucket
 npm ci
-npm run db:migrate          # crea training_jobs, published_models y annotation_queue
+npm run db:migrate          # crea training_jobs y published_models
 npm run dev                 # http://localhost:3000
 ```
 
+Es **un solo portal** (misma app, mismo menú, mismos pasos de arranque): las pantallas de
+anotación del Proyecto 1 (Tablero, Buscar, Subir fotografías, Anotar), las vistas de calidad
+del Proyecto 2 (Resumen, Analizadores, Analítica, Particiones, Versiones, Copilot,
+Configuración) y las cinco páginas del modelo. http://localhost:3000 abre el Tablero y el
+menú lateral lleva a todas. El código de esas pantallas vive en `portal/src/p2/`; su backend
+es el servicio `annotation-api` del compose (misma MariaDB y mismo MinIO, base `image_repo`)
+y el portal le reenvía `/api/p2/*`.
+
 | Página | Qué verificar |
 |---|---|
+| `/dashboard`, `/search`, `/upload` | Portal de anotación: subir una fotografía, buscarla y anotarla |
+| `/overview` … `/settings` | Vistas de calidad del dataset (leen `annotation-backend/quality/reports`) |
 | `/training` | Release `proyecto2 v1.1.0@dc9376e`, split 70/20/10 y lanzar un job (estado y logs persisten al recargar) |
 | `/experiments` | Las corridas de T07 con curvas train/val; el candidato marcado con ★ |
 | `/evaluation` | Abre la versión ganadora: accuracy 94.8 %, matriz y errores desde `predictions.csv` |
 | `/models` | Versión `1.0.0` "Publicado en S3", run, release, SHA-256, descargas firmadas y la tarjeta |
 | `/inference` | Clasificar una imagen nueva o un recorte; probabilidades, versión y hash usados |
-| `/annotation-queue` | El elemento enviado desde Inference, pendiente de anotar |
+| `/search?status=pending` | La imagen enviada desde Inference, pendiente, con la sugerencia del modelo; se anota en `/annotate/<id>` |
 
 `/experiments` y `/evaluation` leen los runs del MLflow de **esta** máquina: en un clon nuevo
-quedan vacías hasta correr los pasos 6–8 (ver "Dónde viven los runs"). `/training`, `/models`,
-`/inference` y `/annotation-queue` funcionan desde el paso 9b, con el modelo publicado en S3.
+quedan vacías hasta correr los pasos 6–8 (ver "Dónde viven los runs"). `/training`, `/models` e
+`/inference` funcionan desde el paso 9b, con el modelo publicado en S3.
 
 Contratos de la API y detalle de cada página: [`portal/README.md`](portal/README.md).
 
