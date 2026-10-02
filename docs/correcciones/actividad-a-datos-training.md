@@ -14,11 +14,34 @@
 El manifiesto entregado (`e75a07ce…`) no se regenera ni se modifica: el de `v1.0.0` va en
 `data/releases/v1.0.0/splits/manifest.csv`, con su propio `.dvc`.
 
+### Cómo se generó `v1.0.0` (reproducible)
+
+```bash
+pip install -r ml/requirements.txt   # IMPORTANTE: fija scikit-learn==1.8.0 e imagehash==4.3.2
+python ml/make_crops.py --annotations data/releases/v1.0.0/source/coco-dataset.json \
+  --images-dir data/releases/v1.0.0/source/images --out-dir data/releases/v1.0.0/crops \
+  --release-tag "proyecto2 v1.0.0@9c0b9a4" --dvc-file data/releases/v1.0.0/release_p2_dvc.txt
+python ml/make_split.py --crops-csv data/releases/v1.0.0/crops/crops.csv \
+  --annotations data/releases/v1.0.0/source/coco-dataset.json \
+  --images-dir data/releases/v1.0.0/source/images \
+  --out-dir data/releases/v1.0.0/splits --seed 42 --test-custodian Alejandra
+```
+
+Resultado: 1350 recortes (945 / 270 / 135), fuga 0, manifiesto MD5
+`3903b3d1e8cb1c39e9f5820cb7e7f840`, huella de test `6f1851fa…`.
+
+Hay que instalar `ml/requirements.txt` **antes** de regenerar: el reparto depende de la
+versión de scikit-learn (`StratifiedGroupKFold`). Con `scikit-learn==1.8.0` el manifiesto
+sale idéntico byte a byte; con otra versión el split puede salir distinto y su MD5 ya no
+coincidiría con el versionado. Los datos se bajan con `AWS_PROFILE=p3 dvc pull`.
+
 ## 2. El job sobrevive a la recarga (6.1)
 
 El id del job queda en la URL (`/training?job=<id>`) y, como respaldo, en localStorage. Al
 montar `TrainingDashboard` se recupera y `JobProgress` vuelve a pedir estado, run y logs a
-`GET /api/training/jobs/[id]` (`portal/src/lib/ui/job-persistence.ts`).
+`GET /api/training/jobs/[id]` (`portal/src/lib/ui/job-persistence.ts`). Si el job se recuperó
+de localStorage, su id se vuelve a poner en la URL. Si el navegador bloquea localStorage,
+la página sigue funcionando solo con `?job=`.
 
 ## 3. Validar el manifiesto actual antes de encolar (6.1)
 

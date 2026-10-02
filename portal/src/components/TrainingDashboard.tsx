@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ApprovedRelease, ListReleasesResponse } from "@/contracts";
 import { errorMessage, fetchJson } from "@/lib/ui/api-client";
-import { recoverJobId, rememberJobId, withJobParam } from "@/lib/ui/job-persistence";
+import {
+  browserStorage,
+  recoverJobId,
+  rememberJobId,
+  withJobParam,
+} from "@/lib/ui/job-persistence";
 import { JobProgress } from "./JobProgress";
 import { ReleaseSelector } from "./ReleaseSelector";
 import { StateMessage } from "./StateMessage";
@@ -34,19 +39,20 @@ export function TrainingDashboard() {
     fetchReleases();
   }, [fetchReleases]);
 
-  // Al recargar la página se recupera el job de la URL (?job=) o de localStorage; su
-  // progreso y sus logs los vuelve a pedir JobProgress a la API.
-  useEffect(() => {
-    const recovered = recoverJobId(window.location.search, window.localStorage);
-    if (recovered) setJobId(recovered);
-  }, []);
-
   const showJob = useCallback((id: string | null) => {
     setJobId(id);
-    rememberJobId(id, window.localStorage);
+    rememberJobId(id, browserStorage());
     const url = withJobParam(window.location.pathname, window.location.search, id);
     window.history.replaceState(window.history.state, "", url);
   }, []);
+
+  // Al recargar la página se recupera el job de la URL (?job=) o de localStorage; su
+  // progreso y sus logs los vuelve a pedir JobProgress a la API. Se pasa por showJob para
+  // que el id recuperado de localStorage también quede en la URL (enlace compartible).
+  useEffect(() => {
+    const recovered = recoverJobId(window.location.search, browserStorage());
+    if (recovered) showJob(recovered);
+  }, [showJob]);
 
   if (load.state === "loading")
     return <StateMessage kind="loading" message="Cargando releases aprobados…" />;

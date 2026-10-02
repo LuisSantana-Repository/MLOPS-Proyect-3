@@ -30,6 +30,18 @@ export function withJobParam(pathname: string, search: string, jobId: string | n
 
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem" | "removeItem">;
 
+/**
+ * localStorage del navegador, o null si está bloqueado. En algunos navegadores (modo
+ * privado, cookies bloqueadas) el solo hecho de leer `window.localStorage` lanza un error.
+ */
+export function browserStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 /** Job a mostrar al cargar la página: el de la URL manda; si no hay, el último guardado. */
 export function recoverJobId(search: string, storage: Storage | null): string | null {
   const fromUrl = jobIdFromSearch(search);
