@@ -185,6 +185,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--alias", default="champion")
     parser.add_argument("--no-artifacts", action="store_true", help="no descarga ni lista artefactos")
     args = parser.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):  # consola de Windows en cp1252
+        sys.stdout.reconfigure(encoding="utf-8")
 
     selection = json.loads(args.selection.read_text(encoding="utf-8"))
     uri = tracking_uri()
