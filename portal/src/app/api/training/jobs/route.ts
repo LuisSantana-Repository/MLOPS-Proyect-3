@@ -24,14 +24,18 @@ export async function POST(request: Request): Promise<NextResponse> {
     const { release, ...rest } = parseOrThrow(createTrainingJobSchema, raw, "cuerpo");
 
     // El release se valida ANTES de crear la fila: existe, pasó la compuerta de calidad
-    // del Proyecto 2 y su manifiesto 70/20/10 no tiene fuga. Si no, 400 y no hay job.
-    await requireApprovedRelease(env.REPO_ROOT, release);
+    // del Proyecto 2 y su manifiesto 70/20/10 ACTUAL (releído ahora, no su reporte) no
+    // tiene cruces entre train, val y test. Si no, 400 y no hay job.
+    const approved = await requireApprovedRelease(env.REPO_ROOT, release);
 
     // Persistimos primero: la tabla es la fuente de verdad del estado.
     const row = await createJob(release, rest);
 
     // Luego encolamos con la forma que espera worker.py: { id, params }.
-    await enqueueTrainingJob({ id: row.id, params: toTrainerParams(release, rest) });
+    await enqueueTrainingJob({
+      id: row.id,
+      params: toTrainerParams(release, rest, approved.paths),
+    });
 
     const body: CreateTrainingJobResponse = {
       id: row.id,

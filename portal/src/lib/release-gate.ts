@@ -20,9 +20,17 @@ import type { QualityGateEvidence } from "@/contracts";
 
 export const QUALITY_ARTIFACTS = {
   registry: "annotation-backend/quality/reports/versions.json",
+  /** Reporte del release vigente del Proyecto 2 (el que sirven las vistas de calidad). */
   gateReport: "annotation-backend/quality/reports/release.json",
+  /** Reportes de otros releases: `<releasesDir>/<versión>/release.json`. */
+  releasesDir: "annotation-backend/quality/releases",
   policy: "annotation-backend/quality/quality.yaml",
 } as const;
+
+/** Reporte de la compuerta guardado por versión (p. ej. `v1.0.0`). */
+export function gateReportPath(version: string): string {
+  return `${QUALITY_ARTIFACTS.releasesDir}/${version}/release.json`;
+}
 
 interface RegistryFile {
   versions?: { version: string; commit?: string; dvcRevision?: string }[];
@@ -92,7 +100,13 @@ export async function evaluateQualityGate(
     };
   }
 
-  const reportBytes = await readBytes(root, QUALITY_ARTIFACTS.gateReport);
+  // Cada versión tiene su propio reporte; el del release vigente vive en `reports/`.
+  let reportFile: string = gateReportPath(version);
+  let reportBytes = await readBytes(root, reportFile);
+  if (!reportBytes) {
+    reportFile = QUALITY_ARTIFACTS.gateReport;
+    reportBytes = await readBytes(root, reportFile);
+  }
   const report = reportBytes ? parseJson<GateReportFile>(reportBytes) : null;
   if (!reportBytes || !report) {
     return { approved: false, reason: `${version} no tiene reporte de la compuerta de calidad` };
@@ -123,7 +137,7 @@ export async function evaluateQualityGate(
       dataHash: entry.dvcRevision,
       generatedAt: report.generated_at ?? null,
       registryFile: QUALITY_ARTIFACTS.registry,
-      reportFile: QUALITY_ARTIFACTS.gateReport,
+      reportFile,
       reportMd5: createHash("md5").update(reportBytes).digest("hex"),
       policyFile: QUALITY_ARTIFACTS.policy,
       policySha256: policyBytes ? createHash("sha256").update(policyBytes).digest("hex") : null,

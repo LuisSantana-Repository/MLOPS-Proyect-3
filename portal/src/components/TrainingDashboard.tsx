@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ApprovedRelease, ListReleasesResponse } from "@/contracts";
 import { errorMessage, fetchJson } from "@/lib/ui/api-client";
+import { recoverJobId, rememberJobId, withJobParam } from "@/lib/ui/job-persistence";
 import { JobProgress } from "./JobProgress";
 import { ReleaseSelector } from "./ReleaseSelector";
 import { StateMessage } from "./StateMessage";
@@ -33,6 +34,20 @@ export function TrainingDashboard() {
     fetchReleases();
   }, [fetchReleases]);
 
+  // Al recargar la página se recupera el job de la URL (?job=) o de localStorage; su
+  // progreso y sus logs los vuelve a pedir JobProgress a la API.
+  useEffect(() => {
+    const recovered = recoverJobId(window.location.search, window.localStorage);
+    if (recovered) setJobId(recovered);
+  }, []);
+
+  const showJob = useCallback((id: string | null) => {
+    setJobId(id);
+    rememberJobId(id, window.localStorage);
+    const url = withJobParam(window.location.pathname, window.location.search, id);
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+
   if (load.state === "loading")
     return <StateMessage kind="loading" message="Cargando releases aprobados…" />;
   if (load.state === "error") {
@@ -45,8 +60,17 @@ export function TrainingDashboard() {
   return (
     <div className="stack">
       <ReleaseSelector releases={load.releases} selectedTag={release ?? ""} onChange={setRelease} />
-      <TrainingForm release={release} onLaunched={(job) => setJobId(job.id)} />
-      {jobId ? <JobProgress key={jobId} jobId={jobId} /> : null}
+      <TrainingForm release={release} onLaunched={(job) => showJob(job.id)} />
+      {jobId ? (
+        <>
+          <JobProgress key={jobId} jobId={jobId} />
+          <div className="actions">
+            <button type="button" className="secondary" onClick={() => showJob(null)}>
+              Dejar de seguir este job
+            </button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
