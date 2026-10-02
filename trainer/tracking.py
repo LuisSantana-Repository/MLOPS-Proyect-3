@@ -13,7 +13,8 @@ Convenciones del run (contrato para T07, T08, T09 y T10):
 - métricas finales: ``best_val_loss``, ``best_val_acc``, ``best_epoch``,
   ``stopped_epoch``, ``duration_seconds``.
 - tags: ``dvc_release``, ``release_annotations_md5``, ``manifest_sha256``,
-  ``manifest_dvc_md5``, ``crops_dvc_md5``, ``git_commit``, ``git_dirty``, ``classes``,
+  ``manifest_dvc_md5``, ``crops_dvc_md5``, ``split_seed``, ``split_method``,
+  ``test_fingerprint`` (de ``leakage_report.json``), ``git_commit``, ``git_dirty``, ``classes``,
   ``stop_reason``, ``weights_sha256``, versiones de librerías y los ``tags`` extra
   (p. ej. ``job_id`` desde el worker). Si ``git_dirty=true``, también ``source_diff_sha256``.
 - artefactos en la raíz del run: ``weights.pt``, ``classes.json``, ``preprocess.json``,
@@ -51,6 +52,7 @@ DEFAULT_EXPERIMENT = "proyecto3-clasificador"
 EPOCH_METRICS = ("train_loss", "train_acc", "val_loss", "val_acc")
 NOT_AVAILABLE = "no disponible"
 SOURCE_PATCH_ARTIFACT = "source/source_diff.patch"
+LEAKAGE_REPORT = "leakage_report.json"  # de ml/make_split.py, junto al manifiesto
 
 
 class ProvenanceError(RuntimeError):
@@ -124,6 +126,16 @@ def default_release_info(cfg: TrainConfig) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
+def split_provenance(report: Path) -> dict[str, str]:
+    """Semilla, método y huella de test del split (T04), desde ``leakage_report.json``."""
+    data = json.loads(report.read_text(encoding="utf-8")) if report.is_file() else {}
+    return {
+        "split_seed": str(data.get("semilla", NOT_AVAILABLE)),
+        "split_method": str(data.get("metodo", NOT_AVAILABLE)),
+        "test_fingerprint": str(data.get("test_huella_sha256", NOT_AVAILABLE)),
+    }
+
+
 def collect_provenance(cfg: TrainConfig, release_info: Path | None, strict: bool = True) -> dict[str, str]:
     """Tags de datos y código. Con ``strict`` falla si el manifiesto no es el versionado en DVC."""
     manifest_md5 = md5_file(cfg.manifest_path)
@@ -144,6 +156,7 @@ def collect_provenance(cfg: TrainConfig, release_info: Path | None, strict: bool
         log.warning("sin release_info.json: el run no queda ligado a un release DVC del Proyecto 2")
 
     root = cfg.data_root if cfg.data_root is not None else cfg.manifest_path.parent
+    split = split_provenance(cfg.manifest_path.parent / LEAKAGE_REPORT)
     commit, dirty = git_info()
     return {
         "dvc_release": str(release.get("release_tag", NOT_AVAILABLE)),
@@ -153,6 +166,7 @@ def collect_provenance(cfg: TrainConfig, release_info: Path | None, strict: bool
         "manifest_md5": manifest_md5,
         "manifest_dvc_md5": manifest_dvc or NOT_AVAILABLE,
         "crops_dvc_md5": dvc_md5(root / "crops.dvc") or NOT_AVAILABLE,
+        **split,
         "git_commit": commit,
         "mlflow.source.git.commit": commit,
         "git_dirty": dirty,

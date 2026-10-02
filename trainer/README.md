@@ -78,7 +78,7 @@ Contenido de cada run:
 | Params | Todos los campos de la config (`hidden_layers` como JSON) |
 | Métricas por época (`step` = época) | `train_loss`, `train_acc`, `val_loss`, `val_acc`, `epoch_seconds` |
 | Métricas finales | `best_val_loss`, `best_val_acc`, `best_epoch`, `stopped_epoch`, `duration_seconds`, `train_samples`, `val_samples` |
-| Tags de datos | `dvc_release`, `release_annotations_md5` (de `release_info.json` de T03), `manifest_sha256`, `manifest_md5`, `manifest_dvc_md5`, `crops_dvc_md5` |
+| Tags de datos | `dvc_release`, `release_annotations_md5` (de `release_info.json` de T03), `manifest_sha256`, `manifest_md5`, `manifest_dvc_md5`, `crops_dvc_md5`, `split_seed`, `split_method`, `test_fingerprint` (de `leakage_report.json` de T04) |
 | Tags de código y entorno | `git_commit`, `git_dirty`, `python_version`, `torch_version`, … , `device` |
 | Tags del modelo | `classes`, `num_classes`, `stop_reason`, `restored_matches_best_epoch`, `weights_sha256`, `pretrained_weights` |
 | Artefactos (raíz del run) | Paquete completo de abajo + `curves.png` |

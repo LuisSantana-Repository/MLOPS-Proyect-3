@@ -46,9 +46,21 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_DEFAULT_REGION: us-east-1
+    # Artefactos de las corridas versionadas (mlflow-store/artifacts, `dvc pull mlflow-store.dvc`).
+    # Se cargan en el bucket `mlflow` de MinIO para que las URIs originales (s3://mlflow/1/<run>/artifacts)
+    # sigan resolviendo sin reescribir nada. `sync` solo agrega: no borra runs nuevos del bucket.
+    volumes:
+      - ./mlflow-store/artifacts:/mlflow-artifacts:ro
     entrypoint: >
       /bin/sh -c "
       aws --endpoint-url http://minio:9000 s3 mb s3://${MLFLOW_BUCKET_NAME} || true;
+      aws --endpoint-url http://minio:9000 s3 mb s3://mlflow || true;
+      if [ -d /mlflow-artifacts/1 ]; then
+        aws --endpoint-url http://minio:9000 s3 sync /mlflow-artifacts s3://mlflow --only-show-errors || exit 1;
+        echo 'artefactos de mlflow-store cargados en s3://mlflow';
+      else
+        echo 'AVISO: mlflow-store/artifacts está vacío; ejecuta dvc pull mlflow-store.dvc';
+      fi;
       exit 0;
       "
 
@@ -66,12 +78,21 @@ services:
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
       MLFLOW_DNS_REBINDING_PROTECTION_ENABLED: "false"
     depends_on:
-      db:
-        condition: service_healthy
       minio:
         condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    # Backend store compartido (P0-1): SQLite versionado con DVC en el remoto S3 del proyecto,
+    # con las 10 corridas originales de T07 y el Model Registry. `dvc pull mlflow-store.dvc` antes
+    # de levantar. Los runs nuevos se agregan a este mismo archivo; para compartirlos:
+    # scripts/mlflow_share.sh (dvc add + dvc push + commit de mlflow-store.dvc).
+    volumes:
+      - ./mlflow-store:/mlflow-store
     command: >
-      mlflow server --backend-store-uri mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE} --default-artifact-root s3://${MLFLOW_BUCKET_NAME}/ --host 0.0.0.0 --port 5000
+      sh -c "
+      test -f /mlflow-store/mlflow.db || { echo 'falta mlflow-store/mlflow.db: ejecuta dvc pull mlflow-store.dvc'; exit 1; };
+      exec mlflow server --backend-store-uri sqlite:////mlflow-store/mlflow.db --default-artifact-root s3://${MLFLOW_BUCKET_NAME}/ --host 0.0.0.0 --port 5000
+      "
     # Se añade un healthcheck a mlflow para que el worker lo espere (Corrección T01)
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
@@ -99,6 +120,9 @@ services:
       - ./data:/app/data:ro
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      # Commit de la copia del repo al levantar; el worker no arranca si la imagen se construyó
+      # desde otro (los runs quedarían con un git_commit viejo). Ver REBUILD_HINT en worker.py.
+      EXPECTED_GIT_COMMIT: ${GIT_COMMIT:-}
       # Credenciales de MinIO para el artifact store de MLflow (AWS_* = MinIO).
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}

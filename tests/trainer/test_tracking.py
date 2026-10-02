@@ -16,6 +16,7 @@ from trainer.tracking import (
     DEFAULT_EXPERIMENT,
     EPOCH_METRICS,
     ProvenanceError,
+    collect_provenance,
     compare_runs,
     git_info,
     main,
@@ -111,6 +112,30 @@ def test_manifest_matching_its_dvc_file_is_accepted(cfg: TrainConfig, mlflow_uri
     (tmp_path / "manifest.csv.dvc").write_text(f"outs:\n- md5: {md5}\n  path: manifest.csv\n")
     tracked = run_tracked(cfg.model_copy(update={"manifest_path": manifest, "data_root": cfg.manifest_path.parent}))
     assert MlflowClient(mlflow_uri).get_run(tracked.run_id).data.tags["manifest_dvc_md5"] == md5
+
+
+def test_split_seed_method_and_test_fingerprint_come_from_the_leakage_report(
+    cfg: TrainConfig, mlflow_uri: str, tmp_path: Path
+) -> None:
+    manifest = tmp_path / "manifest.csv"
+    shutil.copy(cfg.manifest_path, manifest)
+    report = {"semilla": 42, "metodo": "StratifiedGroupKFold(n_splits=10, shuffle=True)", "test_huella_sha256": "2da0"}
+    (tmp_path / "leakage_report.json").write_text(json.dumps(report), encoding="utf-8")
+    moved = cfg.model_copy(update={"manifest_path": manifest, "data_root": cfg.manifest_path.parent})
+
+    tags = collect_provenance(moved, None, strict=False)
+    assert tags["split_seed"] == "42"
+    assert tags["split_method"] == "StratifiedGroupKFold(n_splits=10, shuffle=True)"
+    assert tags["test_fingerprint"] == "2da0"
+
+    tracked = run_tracked(moved)
+    logged = MlflowClient(mlflow_uri).get_run(tracked.run_id).data.tags
+    assert (logged["split_seed"], logged["test_fingerprint"]) == ("42", "2da0")
+
+
+def test_without_leakage_report_the_split_tags_say_not_available(cfg: TrainConfig) -> None:
+    tags = collect_provenance(cfg, None, strict=False)
+    assert tags["split_seed"] == tags["split_method"] == tags["test_fingerprint"] == "no disponible"
 
 
 def test_failed_training_leaves_a_failed_run_with_the_error(cfg: TrainConfig, mlflow_uri: str, tmp_path: Path) -> None:
