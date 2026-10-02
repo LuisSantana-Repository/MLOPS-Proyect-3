@@ -34,7 +34,7 @@ replican `trainer/config.py::TrainConfig`.
 | `GET` | `/api/experiments` | Runs del experimento (`?experiment=`, `?maxResults=`, `?pageToken=`) con parámetros y métricas finales, desde MLflow. |
 | `GET` | `/api/experiments/[runId]/metrics` | Historial por época; por defecto `train_loss` y `val_loss` (`?keys=train_acc,val_acc`). |
 | `GET` | `/api/evaluation/[modelVersion]` | Métricas de evaluación (test/eval), matriz de confusión y clases. Acepta `nombre:version` en la ruta o `?name=` + versión. |
-| `GET` | `/api/releases` | Releases DVC aprobados con procedencia (commit del Proyecto 2, md5 de anotaciones, recortes y manifiesto) y conteos 70/20/10 por clase. Lee los artefactos versionados de T03/T04 (T11). |
+| `GET` | `/api/releases` | Releases del Proyecto 2 con **compuerta de calidad aprobada** (P1-1): procedencia (commit, md5 de anotaciones, recortes y manifiesto), evidencia `quality` (reporte + MD5, política + SHA-256, checks) y conteos 70/20/10 por clase. Un release con compuerta fallida o sin reporte no aparece. `POST /api/training/jobs` valida contra esta lista antes de crear el job (400 si no). |
 | `GET` | `/api/experiments/selection` | Run candidato congelado por T07 (`reports/t07/selection.json`) (T11). |
 | `GET` | `/api/models` | Versiones publicadas (tabla `published_models` de T10): run de origen y enlace a MLflow, release DVC, llave/URI S3, SHA-256 de pesos, fecha, métricas de validación y test, y estado **verificado en S3** (`published` / `incomplete` / `unverified`). Completa con el Model Registry si existe (T13). |
 | `GET` | `/api/models/[version]/card` | Tarjeta del modelo en Markdown: `model_card.md` del paquete (T15) o, si no existe, generada desde `summary.json` (T13). |

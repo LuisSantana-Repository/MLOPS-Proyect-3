@@ -9,12 +9,39 @@
  * - `data/splits/leakage_report.json` semilla, fuga y huella del test (T04)
  * - `data/splits/manifest.csv.dvc`   hash DVC del manifiesto (T04)
  * - `reports/t07/selection.json`     run candidato congelado (T07)
+ * - `annotation-backend/quality/reports/{versions,release}.json`  registro de releases y
+ *   compuerta de calidad del Proyecto 2 (P1-1): solo se listan releases con compuerta aprobada
  */
 
 export const SPLIT_NAMES = ["train", "val", "test"] as const;
 export type SplitName = (typeof SPLIT_NAMES)[number];
 
 export type SplitCounts = Record<SplitName, number> & { total: number };
+
+/**
+ * Evidencia de la compuerta de calidad del Proyecto 2 para un release (P1-1).
+ * Solo existe para releases cuya compuerta pasó: los demás no se listan.
+ */
+export interface QualityGateEvidence {
+  status: "pass";
+  exitCode: number;
+  /** Versión en el registro de releases del Proyecto 2, p. ej. "v1.1.0". */
+  version: string;
+  /** Commit del Proyecto 2 anotado en su registro para esa versión. */
+  registryCommit: string | null;
+  /** Hash DVC de los datos del release (igual en el registro y en los recortes). */
+  dataHash: string;
+  generatedAt: string | null;
+  /** Registro de releases del Proyecto 2 (ruta en este repo). */
+  registryFile: string;
+  /** Reporte de la compuerta (ruta en este repo) y su MD5. */
+  reportFile: string;
+  reportMd5: string;
+  /** Política de calidad con la que se evaluó y su SHA-256. */
+  policyFile: string;
+  policySha256: string | null;
+  checks: { name: string; status: string; severity: string; threshold: number | null }[];
+}
 
 /** Un release aprobado con su procedencia y el split que lo acompaña. */
 export interface ApprovedRelease {
@@ -30,6 +57,8 @@ export interface ApprovedRelease {
     /** MD5 DVC de la carpeta de recortes. */
     cropsMd5: string | null;
   };
+  /** Compuerta de calidad del Proyecto 2: versión, veredicto, reporte y política. */
+  quality: QualityGateEvidence;
   classes: string[];
   split: {
     seed: number | null;

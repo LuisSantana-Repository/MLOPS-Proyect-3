@@ -56,6 +56,41 @@ export function ReleaseSelector({
           </dl>
 
           <h3>
+            Compuerta de calidad · {release.quality.version} ·{" "}
+            <span className="badge status-succeeded">PASS ✓</span>
+          </h3>
+          <dl className="kv">
+            <dt>Reporte</dt>
+            <dd>
+              <code>{release.quality.reportFile}</code> · md5{" "}
+              <code title={release.quality.reportMd5}>{short(release.quality.reportMd5)}</code>
+            </dd>
+            <dt>Política</dt>
+            <dd>
+              <code>{release.quality.policyFile}</code>
+              {release.quality.policySha256 ? (
+                <>
+                  {" "}
+                  · sha256{" "}
+                  <code title={release.quality.policySha256}>
+                    {short(release.quality.policySha256)}
+                  </code>
+                </>
+              ) : null}
+            </dd>
+            <dt>Datos del release (DVC)</dt>
+            <dd>
+              <code title={release.quality.dataHash}>{short(release.quality.dataHash)}</code> ·
+              igual en el registro del Proyecto 2
+            </dd>
+            <dt>Checks</dt>
+            <dd>
+              {release.quality.checks.map((c) => `${c.name}: ${c.status}`).join(" · ")} (exit{" "}
+              {release.quality.exitCode})
+            </dd>
+          </dl>
+
+          <h3>
             Split 70/20/10 · semilla {release.split.seed ?? "—"} · fuga{" "}
             {release.split.leakage === 0 ? "0 ✓" : (release.split.leakage ?? "—")}
           </h3>
