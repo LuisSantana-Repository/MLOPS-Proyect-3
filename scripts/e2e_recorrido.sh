@@ -23,7 +23,7 @@ set -euo pipefail
 
 PORTAL_URL="${PORTAL_URL:-http://localhost:3000}"
 RELEASE="${RELEASE:-proyecto2 v1.1.0@dc9376e}"
-VERSION="${VERSION:-0.0.1-e2e}"   # versión efímera del E2E; NO es 1.0.0 ni 0.9.0
+VERSION="${VERSION:-0.0.1}"   # versión efímera del E2E (semver válido); NO es 1.0.0 ni 0.9.0
 
 json() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 step() { echo; echo "=== $* ==="; }
@@ -52,12 +52,19 @@ curl -fsS "$PORTAL_URL/api/experiments/$RUN_ID/metrics" | json "list(d['metrics'
 
 step "4) Publicación en MinIO aislado (MODELS_S3_USE_MINIO=1)"
 : "${MODELS_S3_USE_MINIO:?exporta MODELS_S3_USE_MINIO=1 para no tocar AWS}"
+# publish_model.py escribe la fila de published_models por defecto (sin --no-db),
+# así que esta publicación deja la versión lista para el portal. --no-registry evita
+# tocar el Model Registry de MLflow con un run efímero del E2E.
 python publish_model.py --run-id "$RUN_ID" --version "$VERSION" --use-minio --overwrite --no-registry
-echo "   publicado clasificador:$VERSION en MinIO"
+echo "   publicado clasificador:$VERSION en MinIO (fila en published_models incluida)"
 
-step "5) Registrar la versión en published_models (para el portal)"
-python -m serving.register --version "$VERSION" --use-minio || \
-  python publish_model.py --run-id "$RUN_ID" --version "$VERSION" --use-minio --overwrite --no-registry
+step "5) Confirmar que la versión quedó registrada en published_models"
+# NO usamos `serving.register`: ese comando verifica el paquete contra el candidato
+# congelado de selection.json (SHA del ganador) y, por diseño, rechaza cualquier run
+# que no sea el ganador —como este run efímero—. El paso 4 ya escribió la fila.
+curl -fsS "$PORTAL_URL/api/models" | json "[m['version'] for m in d['models']]" | grep -q "$VERSION" \
+  && echo "   clasificador:$VERSION visible en /api/models" \
+  || { echo "   la versión $VERSION no aparece en /api/models"; exit 1; }
 
 step "6) Inferencia + envío a anotación (reusa el E2E de P0-3)"
 PORTAL_URL="$PORTAL_URL" scripts/e2e_inference_anotacion.sh "$VERSION"
