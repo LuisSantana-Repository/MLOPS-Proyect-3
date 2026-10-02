@@ -57,10 +57,13 @@ export function handleRouteError(err: unknown): NextResponse<ApiErrorBody> {
 export function parseOrThrow<T>(schema: z.ZodType<T>, data: unknown, what: string): T {
   const result = schema.safeParse(data);
   if (!result.success) {
-    throw badRequest(
-      `${what} inválido`,
-      z.flattenError(result.error).fieldErrors as Record<string, string[]>,
-    );
+    const details = z.flattenError(result.error).fieldErrors as Record<string, string[]>;
+    // Un campo que el schema no conoce se reporta por su nombre, no como error genérico.
+    for (const issue of result.error.issues) {
+      if (issue.code !== "unrecognized_keys") continue;
+      for (const key of issue.keys) details[key] = ["Campo no soportado"];
+    }
+    throw badRequest(`${what} inválido`, details);
   }
   return result.data;
 }

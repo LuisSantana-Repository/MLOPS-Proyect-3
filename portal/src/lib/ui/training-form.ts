@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { type CreateTrainingJobInput, createTrainingJobSchema, OPTIMIZERS } from "@/contracts";
+import {
+  type CreateTrainingJobInput,
+  createTrainingJobSchema,
+  MONITORS,
+  OPTIMIZERS,
+  TRAINABLE_BACKBONES,
+} from "@/contracts";
 
 /**
  * Estado y validación del formulario de /training.
@@ -20,6 +26,11 @@ export const FORM_FIELDS = [
   "shuffle_seed",
   "aug_seed",
   "init_seed",
+  "monitor",
+  "patience",
+  "min_delta",
+  "trainable_backbone",
+  "weight_decay",
 ] as const;
 
 export type FormField = (typeof FORM_FIELDS)[number];
@@ -37,9 +48,16 @@ export const FIELD_LABELS: Record<FormField, string> = {
   shuffle_seed: "Semilla de shuffle",
   aug_seed: "Semilla de augmentation",
   init_seed: "Semilla de inicialización",
+  monitor: "Métrica vigilada",
+  patience: "Patience (épocas sin mejora)",
+  min_delta: "Mejora mínima (min_delta)",
+  trainable_backbone: "Backbone entrenable",
+  weight_decay: "Weight decay",
 };
 
 export const OPTIMIZER_OPTIONS = OPTIMIZERS;
+export const MONITOR_OPTIONS = MONITORS;
+export const BACKBONE_OPTIONS = TRAINABLE_BACKBONES;
 
 /** Valores iniciales = defaults del schema (baseline de T05). */
 export function defaultFormValues(): FormValues {
@@ -55,6 +73,11 @@ export function defaultFormValues(): FormValues {
     shuffle_seed: String(d.shuffle_seed),
     aug_seed: String(d.aug_seed),
     init_seed: String(d.init_seed),
+    monitor: d.monitor,
+    patience: String(d.patience),
+    min_delta: String(d.min_delta),
+    trainable_backbone: d.trainable_backbone,
+    weight_decay: String(d.weight_decay),
   };
 }
 
@@ -86,6 +109,11 @@ export function toRequestBody(release: string, values: FormValues): CreateTraini
     shuffle_seed: toNumber(values.shuffle_seed),
     aug_seed: toNumber(values.aug_seed),
     init_seed: toNumber(values.init_seed),
+    monitor: values.monitor as (typeof MONITORS)[number],
+    patience: toNumber(values.patience),
+    min_delta: toNumber(values.min_delta),
+    trainable_backbone: values.trainable_backbone as (typeof TRAINABLE_BACKBONES)[number],
+    weight_decay: toNumber(values.weight_decay),
   };
 }
 

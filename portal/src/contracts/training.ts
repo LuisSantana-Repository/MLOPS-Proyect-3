@@ -40,9 +40,13 @@ export const seedsSchema = z.object({
  * Parámetros de entrenamiento (sin `release`): 7 hiperparámetros, 3 semillas y
  * ajustes secundarios de early stopping y modelo con defaults del baseline.
  * Es lo que se persiste como `params` del job y viaja al worker.
+ *
+ * El objeto es ESTRICTO: un campo que no esté aquí se rechaza con 400 en vez de
+ * aceptarse y perderse. Y todo campo de aquí lo aplica el worker (`TRAINER_FIELDS`
+ * en worker.py): ningún parámetro aceptado se ignora (P1-2).
  */
 export const trainingParamsSchema = z
-  .object({
+  .strictObject({
     monitor: z.enum(MONITORS).default("val_loss"),
     patience: z.int().min(1).max(100).default(5),
     // default 0.0 según configs/train-config.schema.json (fuente de verdad del contrato).

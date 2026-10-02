@@ -29,7 +29,9 @@ BASE_CONFIG = Path(os.getenv("WORKER_BASE_CONFIG", "configs/baseline.yaml"))
 OUTPUT_ROOT = Path(os.getenv("WORKER_OUTPUT_DIR", "runs/jobs"))
 MAX_ERROR_LENGTH = 2048  # varchar("error", { length: 2048 }) en portal/src/lib/db/schema.ts
 
-# Campos de trainer.config.TrainConfig que el portal puede fijar por job.
+# Campos de trainer.config.TrainConfig que el portal puede fijar por job: TODOS los de
+# `trainingParamsSchema` (portal/src/contracts/training.ts) más las rutas de datos.
+# Un parámetro que no esté aquí hace fallar el job en vez de ignorarse en silencio.
 TRAINER_FIELDS = (
     "optimizer",
     "batch_size",
@@ -41,6 +43,16 @@ TRAINER_FIELDS = (
     "shuffle_seed",
     "aug_seed",
     "init_seed",
+    # Early stopping
+    "monitor",
+    "patience",
+    "min_delta",
+    # Modelo y optimizador
+    "pretrained",
+    "trainable_backbone",
+    "momentum",
+    "weight_decay",
+    # Datos
     "manifest_path",
     "classes_path",
     "data_root",
@@ -131,6 +143,9 @@ def build_config(job_id: str, params: dict[str, Any], base_config: Path, output_
     """Config base (baseline.yaml) + parámetros del formulario, validada por TrainConfig."""
     from trainer.config import load_config
 
+    unsupported = sorted(set(params) - set(TRAINER_FIELDS) - {"release"})
+    if unsupported:
+        raise JobError(f"parámetros no soportados por el entrenador: {', '.join(unsupported)}")
     overrides = {key: params[key] for key in TRAINER_FIELDS if key in params}
     overrides["output_dir"] = str(output_root / job_id)  # cada job en su carpeta
     return load_config(base_config, overrides)
@@ -196,7 +211,10 @@ def run_job(
             "info",
             f"config: optimizer={cfg.optimizer} batch_size={cfg.batch_size} max_epochs={cfg.max_epochs} "
             f"lr={cfg.lr} img_size={cfg.img_size} hidden_layers={cfg.hidden_layers} dropout={cfg.dropout} "
-            f"semillas={cfg.shuffle_seed}/{cfg.aug_seed}/{cfg.init_seed}",
+            f"semillas={cfg.shuffle_seed}/{cfg.aug_seed}/{cfg.init_seed} "
+            f"monitor={cfg.monitor} patience={cfg.patience} min_delta={cfg.min_delta} "
+            f"pretrained={cfg.pretrained} trainable_backbone={cfg.trainable_backbone} "
+            f"momentum={cfg.momentum} weight_decay={cfg.weight_decay}",
         )
 
         def on_start(run_id: str) -> None:
