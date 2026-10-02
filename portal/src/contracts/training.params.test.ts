@@ -64,3 +64,36 @@ describe("P1-2: contrato de parámetros", () => {
     });
   });
 });
+
+/**
+ * Los defaults del portal son la línea base (configs/baseline.yaml), con la que se
+ * corrieron las 10 corridas de T07. Como el worker ya aplica todos los parámetros, un
+ * default distinto cambiaría el entrenamiento: un job con el formulario por defecto debe
+ * reproducir la línea base.
+ */
+describe("P1-2: defaults = línea base", () => {
+  const baseline = readFileSync(resolve(__dirname, "../../../configs/baseline.yaml"), "utf-8");
+  const fromBaseline = (name: string): string | null =>
+    baseline.match(new RegExp(`^${name}:\\s*([^#\\n]+)`, "m"))?.[1].trim() ?? null;
+
+  it("cada parámetro que fija baseline.yaml tiene el mismo valor por defecto en el portal", () => {
+    const defaults = trainingParamsSchema.parse({}) as Record<string, unknown>;
+    const compared: string[] = [];
+    for (const name of PARAMS) {
+      const expected = fromBaseline(name);
+      if (expected === null) continue; // baseline.yaml no lo fija: vale el default del entrenador
+      const actual = Array.isArray(defaults[name])
+        ? `[${(defaults[name] as number[]).join(", ")}]`
+        : String(defaults[name]);
+      expect(actual, `default de ${name}`).toBe(expected);
+      compared.push(name);
+    }
+    expect(compared).toEqual(
+      expect.arrayContaining(["min_delta", "monitor", "patience", "trainable_backbone", "lr"]),
+    );
+  });
+
+  it("min_delta por defecto es 0.001, el de las corridas de T07", () => {
+    expect(createTrainingJobSchema.parse({ release: "r" }).min_delta).toBe(0.001);
+  });
+});

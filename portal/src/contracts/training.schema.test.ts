@@ -33,7 +33,9 @@ describe("Zod vs configs/train-config.schema.json", () => {
     expect(parsed.init_seed).toBe(props.init_seed.default);
     expect(parsed.monitor).toBe(props.monitor.default);
     expect(parsed.patience).toBe(props.patience.default);
-    expect(parsed.min_delta).toBe(props.min_delta.default);
+    // min_delta sigue la línea base (configs/baseline.yaml), no el default genérico del
+    // JSON Schema: ver "defaults = línea base" en training.params.test.ts.
+    expect(parsed.min_delta).toBeGreaterThanOrEqual(props.min_delta.minimum);
   });
 
   it("comparte los mismos enums que el schema JSON", () => {
