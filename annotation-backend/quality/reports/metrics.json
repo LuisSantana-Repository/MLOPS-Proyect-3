@@ -1,0 +1,30 @@
+{
+  "class_imbalance": {
+    "classes_below_min_images": 1,
+    "ratio": 5.929577464788732
+  },
+  "dataset": {
+    "annotations": 1454,
+    "categories": 3,
+    "images": 688,
+    "images_with_phash": 688,
+    "images_without_phash": 0
+  },
+  "duplicates": {
+    "groups": 0,
+    "pairs": 0
+  },
+  "invalid_boxes": {
+    "invalid_count": 0
+  },
+  "small_objects": {
+    "small_count": 6,
+    "small_percent": 0.4127
+  },
+  "spatial_bias": {
+    "mean_x": 0.5008,
+    "mean_y": 0.5244,
+    "std_x": 0.2033,
+    "std_y": 0.1488
+  }
+}

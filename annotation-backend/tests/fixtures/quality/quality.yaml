@@ -1,0 +1,26 @@
+# Politica de calidad (fixture de prueba de la API)
+checks:
+  min_images_per_class:
+    threshold: 300
+    min_classes: 2
+    severity: fail
+  small_objects:
+    threshold: 32
+    severity: warn
+  class_imbalance:
+    threshold: 10
+    severity: warn
+  duplicates:
+    threshold: 8
+    severity: warn
+  invalid_boxes:
+    threshold: 0
+    severity: fail
+  spatial_bias:
+    threshold: 0.5
+    severity: warn
+splits:
+  train: 0.7
+  val: 0.15
+  test: 0.15
+  seed: 42

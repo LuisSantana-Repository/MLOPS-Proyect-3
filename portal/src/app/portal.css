@@ -1,0 +1,40 @@
+/* Estilos base del portal de anotación (Proyecto 1/2): Tailwind + tokens.
+   Se importa ANTES de globals.css para que las páginas del modelo conserven sus reglas. */
+/* biome-ignore lint/suspicious/noUnknownAtRules: directiva de Tailwind */
+@tailwind base;
+/* biome-ignore lint/suspicious/noUnknownAtRules: directiva de Tailwind */
+@tailwind components;
+/* biome-ignore lint/suspicious/noUnknownAtRules: directiva de Tailwind */
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: #fafaf9;
+  color: #1c1b1a;
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Foco de teclado visible en todo elemento interactivo */
+:focus-visible {
+  outline: 2px solid #7c6fea;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: debe ganar a cualquier animación */
+    animation-duration: 0.001ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: debe ganar a cualquier animación */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: debe ganar a cualquier animación */
+    transition-duration: 0.001ms !important;
+  }
+}

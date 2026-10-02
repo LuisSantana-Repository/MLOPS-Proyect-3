@@ -1,0 +1,46 @@
+# Política de calidad del dataset. Ver dataset_quality.models.config para
+# el esquema exacto que valida este archivo (checks obligatorios,
+# extra="forbid" — un campo mal escrito aquí rompe la carga, a propósito).
+
+checks:
+  # Compuerta principal (CAL 08): al menos min_classes clases distintas deben
+  # llegar a threshold imágenes. NO exige que TODAS las clases lleguen a
+  # 300 — con 3 clases (person, car, dog) y dog naturalmente más chica,
+  # exigir 300 en las 3 haría fallar el gate siempre por dog.
+  min_images_per_class:
+    threshold: 300
+    min_classes: 2
+    severity: fail
+
+  small_objects:
+    threshold: 32 # px — por debajo de esto, la caja se considera "pequeña"
+    max_small_percent: 15 # % de cajas "pequeñas" que se considera excesivo.
+      # El dataset real (689 img) mide 0.41%; 15% da margen amplio antes de
+      # marcar un problema genuino de calidad de anotación.
+    severity: warn
+
+  class_imbalance:
+    threshold: 10 # ratio máximo permitido entre clase mayoritaria/minoritaria
+    severity: warn
+
+  duplicates:
+    threshold: 8 # distancia pHash máxima para considerar "casi duplicada"
+    severity: warn
+
+  invalid_boxes:
+    threshold: 0 # cualquier caja inválida detectada ya es un fail
+    severity: fail
+
+  spatial_bias:
+    threshold: 0.5
+    max_center_deviation: 0.15 # distancia máxima del centro promedio de las
+      # cajas respecto al centro geométrico (0.5, 0.5) de la imagen. El
+      # dataset real mide ~0.025; 0.15 da margen antes de marcar sesgo
+      # espacial genuino.
+    severity: warn
+
+splits:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+  seed: 42

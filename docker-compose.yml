@@ -177,6 +177,71 @@ services:
       mlflow:
         condition: service_healthy
 
+  # ---------------------------------------------------------------------------
+  # Portal de anotación (Proyectos 1 y 2), ahora dentro de este mismo stack (P0-2).
+  # Usa la MISMA MariaDB y el MISMO MinIO que MLflow, con su propia base de datos
+  # (image_repo) y su propio bucket (image-annotations).
+  # ---------------------------------------------------------------------------
+
+  # Crea la base de datos del portal de anotación si no existe (corre una vez y termina).
+  annotation-db-init:
+    image: mariadb:10.11
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+    entrypoint: >
+      /bin/sh -c "
+      mariadb -h db -uroot -p$${MYSQL_ROOT_PASSWORD} -e \"CREATE DATABASE IF NOT EXISTS image_repo; GRANT ALL PRIVILEGES ON image_repo.* TO '$${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;\"
+      "
+
+  # Backend del portal de anotación: imágenes, anotaciones, categorías, export COCO y
+  # vistas de calidad. El portal (Next.js) le reenvía /api/p2/* (ver portal/next.config.mjs).
+  annotation-api:
+    build: ./annotation-backend
+    restart: on-failure:5
+    depends_on:
+      annotation-db-init:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_NAME: image_repo
+      STORAGE_PROVIDER: minio
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: image-annotations
+      MAX_UPLOAD_SIZE_BYTES: 5242880
+      # Vistas de calidad: reportes del pipeline de calidad del Proyecto 2 y su política.
+      QUALITY_ARTIFACTS_DIR: /artifacts
+      QUALITY_CONFIG_PATH: /config/quality.yaml
+      # Dataset Copilot (opcional). Sin clave responde en modo anclado.
+      COPILOT_PROVIDER: ${COPILOT_PROVIDER:-none}
+      COPILOT_API_KEY: ${COPILOT_API_KEY:-}
+      COPILOT_MODEL: ${COPILOT_MODEL:-}
+    volumes:
+      - ${QUALITY_REPORTS_DIR:-./annotation-backend/quality/reports}:/artifacts:ro
+      - ${QUALITY_CONFIG_FILE:-./annotation-backend/quality/quality.yaml}:/config/quality.yaml
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
 volumes:
   db_data:
   minio_data:

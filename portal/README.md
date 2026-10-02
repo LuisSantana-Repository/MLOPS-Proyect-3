@@ -40,9 +40,7 @@ replican `trainer/config.py::TrainConfig`.
 | `GET` | `/api/models/[version]/card` | Tarjeta del modelo en Markdown: `model_card.md` del paquete (T15) o, si no existe, generada desde `summary.json` (T13). |
 | `GET` | `/api/models/[version]/files/[file]` | `302` a una URL firmada de S3 para descargar un archivo del paquete; `404` si el objeto no existe (T13). |
 | `POST` | `/api/inference` | `multipart/form-data` con `version` y `file`. Valida que la versión esté publicada y completa en S3, y que la imagen sea JPEG/PNG (por firma de bytes, máx. 5 MB); reenvía a `POST /predict` de T10, valida que las probabilidades sumen ≈ 1 y guarda la imagen en MinIO (T13). |
-| `GET` | `/api/annotation-queue` | Cola de anotación (`?status=pending\|annotated\|discarded`, `?limit=`) con conteos por estado (T13). |
-| `POST` | `/api/annotation-queue` | Envía una imagen clasificada a la cola (`pending`) con la clase sugerida; verifica versión publicada, imagen existente y clase = argmax. Responde `201` (T13). |
-| `GET` | `/api/annotation-queue/[id]/image` | Imagen de un elemento de la cola (T13). |
+| `POST` | `/api/annotation` | Envía una imagen clasificada al flujo de anotación del portal (Proyecto 1): la registra en `annotation-api` (`POST /images`) como `pending`, con la clase sugerida, las probabilidades y la versión del modelo. Verifica versión publicada, imagen existente y clase = argmax. Responde `201` con `imageId` y `annotateUrl` (P0-3). |
 
 Los errores siguen la forma `ApiErrorBody`:
 
@@ -62,7 +60,6 @@ caídos), `integrity_error` (502, el modelo no pasó la verificación de hash), 
 | `/experiments` | Tabla ordenable de runs (parámetros, mejor `val_loss`, `val_acc`) con el candidato de T07 marcado con ★, y curvas train/val por época del run elegido. `?run=<runId>` abre ese run. Por defecto muestra todos los runs; el filtro "Solo runs de selección" aplica el de T07. |
 | `/models` | Versiones publicadas: versión de **modelo** y release DVC del **dataset** en columnas separadas, run con enlace a MLflow, llave S3, SHA-256, fecha, estado verificado en S3, descargas firmadas y tarjeta del modelo renderizada desde Markdown. Un paquete incompleto en S3 no se ofrece para descargar ni para inferir (T13). |
 | `/inference` | Elige una versión publicada (`?version=` la preselecciona) y sube una imagen; muestra clase, barras de probabilidad y la versión y hash de pesos usados. "Enviar a anotación" crea un elemento real en la cola (T13). |
-| `/annotation-queue` | Cola de anotación por estado, con miniatura, clase sugerida, confianza, versión de modelo y origen (T13). |
 
 Sin datos simulados: cada vista tiene estados de carga, vacío y error (con reintento).
 Las gráficas son SVG propio (`src/lib/ui/chart.ts`), sin librería de gráficas.

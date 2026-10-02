@@ -122,6 +122,34 @@ jobs:
         run: pytest -q
 
   # ---------------------------------------------------------------------------
+  # 3b) Backend del portal de anotación (Proyectos 1 y 2): build + Vitest.
+  #     Incluye la prueba de integración de P0-3 (Inference -> pendiente de anotar).
+  # ---------------------------------------------------------------------------
+  annotation-backend-tests:
+    name: Annotation backend (build + Vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: annotation-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: annotation-backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (tsc)
+        run: npm run build
+
+      - name: Vitest
+        run: npm test
+
+  # ---------------------------------------------------------------------------
   # 4) Escaneo de secretos con gitleaks
   #    "escaneo de secretos sin hallazgos" -> falla el job si detecta algo.
   # ---------------------------------------------------------------------------

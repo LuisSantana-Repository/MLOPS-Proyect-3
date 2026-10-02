@@ -13,7 +13,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const ROOT = process.cwd();
-const PAGES = ["training", "experiments", "evaluation", "models", "inference", "annotation-queue"];
+const PAGES = ["training", "experiments", "evaluation", "models", "inference"];
 const SHARED = ["src/components", "src/lib/ui"];
 const SOURCE = /\.(tsx?|jsx?|mjs)$/;
 const TEST = /\.(test|spec)\.[jt]sx?$/;

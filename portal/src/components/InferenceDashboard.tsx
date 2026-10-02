@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
-  type AnnotationQueueItem,
+  type AnnotationSubmission,
   type CropInfo,
   INFERENCE_LIMITS,
   type InferenceResponse,
@@ -37,7 +37,19 @@ type Send =
   | { state: "idle" }
   | { state: "sending" }
   | { state: "error"; message: string }
-  | { state: "sent"; item: AnnotationQueueItem };
+  | { state: "sent"; item: AnnotationSubmission };
+
+/** Confirmación de envío: la imagen ya está en el portal de anotación, pendiente. */
+export function SentToAnnotation({ item }: { item: AnnotationSubmission }) {
+  return (
+    <p role="status">
+      Registrada en el portal de anotación como imagen <code>#{item.imageId}</code> (pendiente), con
+      la sugerencia <strong>{item.suggestedClass}</strong> del modelo{" "}
+      <code>{item.modelVersion}</code>. <Link href={item.annotateUrl}>Anotar ahora</Link> ·{" "}
+      <Link href={item.pendingUrl}>Ver pendientes</Link>
+    </p>
+  );
+}
 
 const SOURCE_LABELS: Record<InferenceSource, string> = {
   upload: "Subir imagen nueva",
@@ -127,7 +139,7 @@ export function InferenceDashboard({ requestedVersion }: { requestedVersion: str
   async function sendToAnnotation(result: InferenceResponse) {
     setSend({ state: "sending" });
     try {
-      const item = await fetchJson<AnnotationQueueItem>("/api/annotation-queue", {
+      const item = await fetchJson<AnnotationSubmission>("/api/annotation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -280,12 +292,7 @@ export function InferenceDashboard({ requestedVersion }: { requestedVersion: str
                 </button>
               </div>
               {send.state === "error" ? <StateMessage kind="error" message={send.message} /> : null}
-              {send.state === "sent" ? (
-                <p role="status">
-                  Agregada a la cola como <code>{send.item.id}</code> (pendiente).{" "}
-                  <Link href="/annotation-queue">Ver cola de anotación</Link>
-                </p>
-              ) : null}
+              {send.state === "sent" ? <SentToAnnotation item={send.item} /> : null}
             </div>
           </div>
         </section>

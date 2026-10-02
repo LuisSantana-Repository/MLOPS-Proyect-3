@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "method": "pca",
+  "generated_at": "2026-09-18T00:00:00+00:00",
+  "explained_variance": [
+    0.48778231853702386,
+    0.3884573046614371
+  ],
+  "feature_names": [
+    "log_box_count",
+    "mean_relative_area",
+    "mean_center_x",
+    "mean_center_y",
+    "category_1",
+    "category_2",
+    "category_3"
+  ],
+  "points": [
+    {
+      "image_id": 1,
+      "file_name": "demo_01.jpg",
+      "x": 0.3880835654004816,
+      "y": -0.596533052838942,
+      "category_ids": [
+        1
+      ],
+      "box_count": 1
+    },
+    {
+      "image_id": 2,
+      "file_name": "demo_02.jpg",
+      "x": 0.36167391386655867,
+      "y": -0.5864519160702801,
+      "category_ids": [
+        1
+      ],
+      "box_count": 1
+    },
+    {
+      "image_id": 3,
+      "file_name": "demo_03.jpg",
+      "x": 0.3321391731367843,
+      "y": -0.5544775558984886,
+      "category_ids": [
+        1
+      ],
+      "box_count": 1
+    },
+    {
+      "image_id": 4,
+      "file_name": "demo_04.jpg",
+      "x": 0.38891151511025207,
+      "y": -0.5758837471016426,
+      "category_ids": [
+        1
+      ],
+      "box_count": 1
+    },
+    {
+      "image_id": 5,
+      "file_name": "demo_05.jpg",
+      "x": 0.03793168687302037,
+      "y": 0.7663629394166683,
+      "category_ids": [
+        2
+      ],
+      "box_count": 1
+    },
+    {
+      "image_id": 6,
+      "file_name": "demo_06.jpg",
+      "x": -0.005002925244612071,
+      "y": 0.7826552559595658,
+      "category_ids": [
+        2
+      ],
+      "box_count": 1
+    },
+    {
+      "image_id": 7,
+      "file_name": "demo_07.jpg",
+      "x": -0.03889868689546852,
+      "y": 0.8052716060889096,
+      "category_ids": [
+        2
+      ],
+      "box_count": 1
+    },
+    {
+      "image_id": 8,
+      "file_name": "demo_08.jpg",
+      "x": -1.0,
+      "y": -0.1456143078286572,
+      "category_ids": [
+        3
+      ],
+      "box_count": 1
+    },
+    {
+      "image_id": 9,
+      "file_name": "demo_09.jpg",
+      "x": -0.9397435626269635,
+      "y": -0.19113347191312494,
+      "category_ids": [
+        3
+      ],
+      "box_count": 2
+    },
+    {
+      "image_id": 10,
+      "file_name": "demo_10.jpg",
+      "x": -0.9292236466351826,
+      "y": -0.19923291558559555,
+      "category_ids": [
+        3
+      ],
+      "box_count": 1
+    },
+    {
+      "image_id": 11,
+      "file_name": "demo_11.jpg",
+      "x": 0.7020644835075647,
+      "y": 0.24751858288579306,
+      "category_ids": [
+        1,
+        2
+      ],
+      "box_count": 2
+    },
+    {
+      "image_id": 12,
+      "file_name": "demo_12.jpg",
+      "x": 0.7020644835075647,
+      "y": 0.24751858288579306,
+      "category_ids": [
+        1,
+        2
+      ],
+      "box_count": 2
+    }
+  ]
+}
