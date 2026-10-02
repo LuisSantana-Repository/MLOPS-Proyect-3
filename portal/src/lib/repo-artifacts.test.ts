@@ -12,6 +12,12 @@ import {
   requireApprovedRelease,
   sourceCommit,
 } from "./repo-artifacts";
+import {
+  CLEAN_MANIFEST,
+  md5,
+  writeRelease as writeFixtureRelease,
+  writeRegistry,
+} from "./testing/release-fixture";
 
 const SPLIT_CSV =
   "clase,total,train,train_pct,val,val_pct,test,test_pct\r\n" +
@@ -48,6 +54,7 @@ async function writeRelease() {
     ARTIFACTS.manifestDvc,
     "outs:\n- md5: e75a07ce3b75455514f044b23e0d1b29\n  path: manifest.csv\n",
   );
+  await write("data/splits/manifest.csv", CLEAN_MANIFEST);
   await write(
     ARTIFACTS.cropsDvc,
     "outs:\n- md5: f839dd62b048da0186ade1e382bb7f66.dir\n  path: crops\n",
@@ -230,6 +237,10 @@ describe("P1-1: compuerta de calidad del Proyecto 2", () => {
 
   it("requireApprovedRelease: devuelve el release aprobado", async () => {
     await writeRelease();
+    await write(
+      ARTIFACTS.manifestDvc,
+      `outs:\n- md5: ${md5(CLEAN_MANIFEST)}\n  path: manifest.csv\n`,
+    );
     const release = await requireApprovedRelease(root, "proyecto2 v1.1.0@dc9376e");
     expect(release.quality.status).toBe("pass");
   });
@@ -259,6 +270,86 @@ describe("P1-1: compuerta de calidad del Proyecto 2", () => {
     expect(release.quality.reportMd5).toBe("7975c619c6b2dc99ba4a052f70d522b0");
     expect(release.quality.checks).toHaveLength(6);
     expect(release.split.totals).toEqual({ train: 944, val: 270, test: 135, total: 1349 });
+  });
+});
+
+describe("Actividad A (1.1): varios releases aprobados", () => {
+  const V110 = "proyecto2 v1.1.0@dc9376e";
+  const V100 = "proyecto2 v1.0.0@9c0b9a4";
+
+  beforeEach(async () => {
+    await writeRegistry(root);
+    await writeFixtureRelease(root);
+    await writeFixtureRelease(root, { version: "v1.0.0" });
+  });
+
+  it("lista los dos releases, cada uno con sus conteos, su hash y su manifiesto", async () => {
+    const releases = await readApprovedReleases(root);
+    expect(releases.map((r) => r.tag)).toEqual([V110, V100]);
+
+    const [current, previous] = releases;
+    expect(current.split.totals).toEqual({ train: 944, val: 270, test: 135, total: 1349 });
+    expect(previous.split.totals).toEqual({ train: 945, val: 270, test: 135, total: 1350 });
+    expect(current.quality.dataHash).toBe("1fdb1dcea3218ad2fb0edf985984a929");
+    expect(previous.quality.dataHash).toBe("2ae957bda56b5cf9293fd620b781e699");
+    expect(previous.provenance.annotationsMd5).not.toBe(current.provenance.annotationsMd5);
+    expect(current.paths.manifest).toBe("data/splits/manifest.csv");
+    expect(previous.paths).toEqual({
+      manifest: "data/releases/v1.0.0/splits/manifest.csv",
+      classes: "data/releases/v1.0.0/crops/classes.json",
+      dataRoot: "data/releases/v1.0.0/crops",
+    });
+  });
+
+  it("cada release se aprueba con el reporte de compuerta de SU versión", async () => {
+    const [current, previous] = await readApprovedReleases(root);
+    expect(current.quality).toMatchObject({
+      version: "v1.1.0",
+      reportFile: "annotation-backend/quality/reports/release.json",
+    });
+    expect(previous.quality).toMatchObject({
+      version: "v1.0.0",
+      reportFile: "annotation-backend/quality/releases/v1.0.0/release.json",
+    });
+  });
+
+  it("si la compuerta del segundo release falló, solo aparece el primero", async () => {
+    await writeFixtureRelease(root, { version: "v1.0.0", gate: { status: "fail", exitCode: 1 } });
+    expect((await readApprovedReleases(root)).map((r) => r.tag)).toEqual([V110]);
+  });
+
+  it("el reporte de v1.1.0 no sirve para aprobar v1.0.0", async () => {
+    await rm(join(root, "annotation-backend/quality/releases"), { recursive: true });
+    expect((await readApprovedReleases(root)).map((r) => r.tag)).toEqual([V110]);
+  });
+
+  it("una carpeta de data/releases sin release_info.json se ignora", async () => {
+    await write("data/releases/v0.0.1/notas.txt", "vacío");
+    expect(await readApprovedReleases(root)).toHaveLength(2);
+  });
+
+  it("requireApprovedRelease encuentra cualquiera de los dos y revisa su manifiesto", async () => {
+    expect((await requireApprovedRelease(root, V100)).tag).toBe(V100);
+    expect((await requireApprovedRelease(root, V110)).tag).toBe(V110);
+    await expect(requireApprovedRelease(root, "v9.9.9@noaprobado")).rejects.toMatchObject({
+      status: 400,
+      details: { release: [expect.stringContaining(V100)] },
+    });
+  });
+
+  it("la fuga en el manifiesto de un release no bloquea al otro", async () => {
+    await writeFixtureRelease(root, {
+      version: "v1.0.0",
+      manifest: CLEAN_MANIFEST.replace(
+        "img000061,test\ncrops/61_81",
+        "img000061,train\ncrops/61_81",
+      ),
+    });
+    await expect(requireApprovedRelease(root, V100)).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining("fuga entre particiones"),
+    });
+    expect((await requireApprovedRelease(root, V110)).tag).toBe(V110);
   });
 });
 
