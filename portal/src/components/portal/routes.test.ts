@@ -47,7 +47,6 @@ describe("P0-2: un solo portal para los Proyectos 1, 2 y 3", () => {
     expect(isAnnotationPortalPath("/annotate/42")).toBe(true);
     expect(isAnnotationPortalPath("/training")).toBe(false);
     expect(isAnnotationPortalPath("/inference")).toBe(false);
-    expect(isAnnotationPortalPath("/annotation-queue")).toBe(false);
     expect(isAnnotationPortalPath("/")).toBe(false);
   });
 

@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ModelVersionInfo } from "@/contracts";
 import { cropsQuery, pickVersion, usableVersions, validateImageFile } from "@/lib/ui/models";
-import { AnnotationQueueDashboard } from "./AnnotationQueueDashboard";
 import { InferenceDashboard } from "./InferenceDashboard";
 import { ModelsDashboard } from "./ModelsDashboard";
 import { ModelsTable } from "./ModelsTable";
@@ -95,7 +94,6 @@ describe("dashboards (render inicial)", () => {
     expect(renderToStaticMarkup(<InferenceDashboard requestedVersion={null} />)).toContain(
       "Cargando versiones publicadas",
     );
-    expect(renderToStaticMarkup(<AnnotationQueueDashboard />)).toContain("Cargando cola");
   });
 });
 

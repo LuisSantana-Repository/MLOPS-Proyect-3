@@ -64,7 +64,9 @@ export type {
 } from './image-search.service.js';
 export { searchImages } from './image-search.service.js';
 export { setImageStatus } from './image-status.service.js';
-export { deleteImage, uploadImage } from './image-upload.service.js';
+export type { ModelSuggestion } from './image-suggestion.js';
+export { parseModelSuggestion, readModelSuggestion } from './image-suggestion.js';
+export { deleteImage, getImageDetail, uploadImage } from './image-upload.service.js';
 export type {
   AnalyzersBundle,
   CategoryRef,

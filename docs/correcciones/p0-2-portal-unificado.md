@@ -36,5 +36,4 @@ congelado no se tocaron. Las cinco páginas del modelo conservan su código y su
 
 - Las vistas de calidad muestran estado vacío hasta copiar los reportes del pipeline del
   Proyecto 2 (`release.json`, `embeddings.json`) a `annotation-backend/quality/reports/` (P1-1).
-- "Enviar a anotación" desde Inference todavía usa `annotation_queue`; pasa al flujo de
-  anotación de este backend en P0-3.
+- "Enviar a anotación" desde Inference: ver `p0-3-enviar-a-anotacion.md`.

@@ -11,11 +11,13 @@ import {
   getAnnotationsForImage,
   getCategories,
   getDashboardSummary,
+  getImageDetail,
   getImageFile,
   idParamSchema,
   imageSearchSchema,
   initializeApplication,
   NotFoundError,
+  parseModelSuggestion,
   searchImages,
   setImageStatus,
   updateAnnotation,
@@ -118,11 +120,16 @@ app.post('/images', upload.single('image'), async (req, res) => {
   }
 
   try {
+    // Campos opcionales que manda la página Inference del portal: la clase
+    // sugerida por el modelo, sus probabilidades y la versión que predijo.
+    const suggestion = parseModelSuggestion(req.body);
+
     const image = await uploadImage({
       filename: req.file.originalname,
       mimeType: req.file.mimetype,
       sizeBytes: req.file.size,
       buffer: req.file.buffer,
+      suggestion,
     });
 
     // El body va plano (sin wrapper), así coincide con el contrato que
@@ -195,6 +202,23 @@ app.delete('/images/:imageId', async (req, res) => {
     res.status(204).end();
   } catch (error) {
     sendError(res, error, 'No se pudo eliminar la imagen.');
+  }
+});
+
+/**
+ * Metadatos de una imagen, con la sugerencia del modelo si llegó desde Inference.
+ */
+app.get('/images/:imageId', async (req, res) => {
+  const imageId = parseIdParam(req.params.imageId);
+  if (imageId === null) {
+    res.status(400).json({ error: 'ID de imagen inválido.' });
+    return;
+  }
+
+  try {
+    res.status(200).json(await getImageDetail(imageId));
+  } catch (error) {
+    sendError(res, error, 'Error al obtener la imagen.');
   }
 });
 

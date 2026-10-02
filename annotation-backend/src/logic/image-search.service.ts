@@ -6,6 +6,7 @@ import {
 } from '../data/index.js';
 import { buildThumbnailUrl } from './dashboard.builder.js';
 import { ValidationError } from './errors.js';
+import { type ModelSuggestion, readModelSuggestion } from './image-suggestion.js';
 import { parseSearchQuery } from './search-query.parser.js';
 
 /** Categoría resumida que acompaña a cada resultado. */
@@ -23,6 +24,8 @@ export interface ImageSearchItem extends Image {
   thumbnailUrl: string;
   annotationsCount: number;
   categories: SearchResultCategory[];
+  /** Sugerencia del clasificador, si la imagen llegó desde Inference. */
+  suggestion: ModelSuggestion | null;
 }
 
 export interface SearchImagesInput {
@@ -86,6 +89,7 @@ export async function searchImages(input: SearchImagesInput): Promise<SearchImag
     thumbnailUrl: buildThumbnailUrl(image.id),
     annotationsCount: annotationCounts.get(image.id) ?? 0,
     categories: categoriesByImage.get(image.id) ?? [],
+    suggestion: readModelSuggestion(image),
   }));
 
   return {

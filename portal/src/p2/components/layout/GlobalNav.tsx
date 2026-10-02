@@ -6,7 +6,6 @@ import {
   FlaskConical,
   History,
   LayoutDashboard,
-  ListChecks,
   PieChart,
   Rocket,
   ScatterChart,
@@ -49,7 +48,6 @@ const MODEL_ITEMS: NavItem[] = [
   { label: "Evaluation", to: "/evaluation", icon: Target },
   { label: "Models", to: "/models", icon: Boxes },
   { label: "Inference", to: "/inference", icon: Sparkles },
-  { label: "Cola de anotación", to: "/annotation-queue", icon: ListChecks },
 ];
 
 function NavGroup({ items }: { items: NavItem[] }) {

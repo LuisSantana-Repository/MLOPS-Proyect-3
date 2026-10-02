@@ -12,6 +12,7 @@ import {
 } from '../data/index.js';
 
 import { NotFoundError, ValidationError } from './errors.js';
+import { type ModelSuggestion, readModelSuggestion } from './image-suggestion.js';
 import { validateImageUpload } from './image-upload.validation.js';
 
 export interface UploadImageInput {
@@ -19,6 +20,8 @@ export interface UploadImageInput {
   mimeType: string;
   sizeBytes: number;
   buffer: Buffer;
+  /** Sugerencia del clasificador (solo cuando llega desde Inference). */
+  suggestion?: ModelSuggestion | null;
 }
 
 export interface UploadImageResult {
@@ -27,6 +30,9 @@ export interface UploadImageResult {
   storageKey: string;
   width: number;
   height: number;
+  /** Toda imagen nueva entra al flujo de anotación como pendiente. */
+  status: 'pending';
+  suggestion: ModelSuggestion | null;
 }
 
 /**
@@ -59,6 +65,8 @@ export async function uploadImage(input: UploadImageInput): Promise<UploadImageR
     throw new ValidationError('No se pudieron obtener las dimensiones de la imagen.');
   }
 
+  const suggestion = input.suggestion ?? null;
+
   // Genera una key única para evitar colisiones en el almacenamiento de objetos.
   const storageKey = `images/${randomUUID()}`;
 
@@ -74,6 +82,9 @@ export async function uploadImage(input: UploadImageInput): Promise<UploadImageR
       width: metadata.width,
       height: metadata.height,
       sizeBytes: input.sizeBytes,
+      suggestedCategory: suggestion?.category ?? null,
+      suggestedProbabilities: suggestion ? JSON.stringify(suggestion.probabilities) : null,
+      suggestedModelVersion: suggestion?.modelVersion ?? null,
     });
 
     return {
@@ -82,6 +93,8 @@ export async function uploadImage(input: UploadImageInput): Promise<UploadImageR
       storageKey,
       width: metadata.width,
       height: metadata.height,
+      status: 'pending',
+      suggestion,
     };
   } catch (error) {
     // Si MariaDB falla, elimina el objeto para no dejar basura.
@@ -89,6 +102,16 @@ export async function uploadImage(input: UploadImageInput): Promise<UploadImageR
 
     throw error;
   }
+}
+
+/** Metadatos de una imagen con la sugerencia del modelo, si la tiene. */
+export async function getImageDetail(imageId: number) {
+  const image = await findImageById(imageId);
+  if (!image) {
+    throw new NotFoundError('La imagen no existe.');
+  }
+
+  return { ...image, suggestion: readModelSuggestion(image) };
 }
 
 /**

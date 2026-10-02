@@ -60,7 +60,17 @@ export type ImageSearchResponse = z.infer<typeof imageSearchResponseSchema>;
 // GET /images/:id/file (naturalWidth/naturalHeight), que sí es un endpoint
 // del prompt. Si el backend real no expone GET /images/:id, no hace falta
 // tocar nada: la llamada falla en silencio y se usan valores por defecto.
-export const imageDetailResponseSchema = imageSchema;
+export const imageDetailResponseSchema = imageSchema.extend({
+  // Sugerencia del clasificador, solo en imágenes enviadas desde Inference.
+  suggestion: z
+    .object({
+      category: z.string(),
+      probabilities: z.record(z.string(), z.number()),
+      modelVersion: z.string(),
+    })
+    .nullish(),
+});
+export type ImageDetail = z.infer<typeof imageDetailResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // Categories

@@ -15,7 +15,7 @@ export default async function InferencePage({
       <p className="muted">
         Clasifica una imagen con una versión publicada. El servicio de inferencia descarga el
         paquete de S3, verifica el SHA-256 de los pesos y aplica el mismo preprocesamiento de la
-        evaluación. El resultado se puede enviar a la cola de anotación.
+        evaluación. El resultado se puede enviar al portal de anotación.
       </p>
       <InferenceDashboard requestedVersion={typeof version === "string" ? version : null} />
     </main>

@@ -1,18 +1,17 @@
 import { z } from "zod";
-import { type ImageRef, imageRefSchema, modelVersionSchema } from "./inference";
+import { imageRefSchema, modelVersionSchema } from "./inference";
 
 /**
- * Cola de anotación (T13).
+ * «Enviar a anotación» desde Inference (P0-3).
  *
- * Equivale a las imágenes `pending` del portal del Proyecto 2: cada elemento es
- * una imagen que un anotador debe revisar, con la clase que sugirió el modelo.
+ * La imagen clasificada entra al flujo de anotación del portal (Proyecto 1): se
+ * registra en su tabla `images` como `pending`, con la clase sugerida por el modelo
+ * y sus probabilidades como metadato, y se anota desde la pantalla de anotación de
+ * siempre (`/annotate/<id>`). No existe una cola aparte.
  */
 
-export const ANNOTATION_STATUSES = ["pending", "annotated", "discarded"] as const;
-export type AnnotationStatus = (typeof ANNOTATION_STATUSES)[number];
-
-/** Cuerpo de POST /api/annotation-queue. */
-export const createAnnotationItemSchema = z.object({
+/** Cuerpo de POST /api/annotation. */
+export const sendToAnnotationSchema = z.object({
   image: imageRefSchema,
   modelVersion: modelVersionSchema,
   suggestedClass: z.string().min(1).max(128),
@@ -21,22 +20,20 @@ export const createAnnotationItemSchema = z.object({
     .refine((p) => Object.keys(p).length >= 2, "Se esperan probabilidades de al menos 2 clases"),
 });
 
-export type CreateAnnotationItemInput = z.infer<typeof createAnnotationItemSchema>;
+export type SendToAnnotationInput = z.infer<typeof sendToAnnotationSchema>;
 
-export interface AnnotationQueueItem {
-  id: string;
-  status: AnnotationStatus;
-  image: ImageRef;
-  /** URL del portal para ver la imagen. */
-  imageUrl: string;
+/** Respuesta de POST /api/annotation: la imagen ya registrada en el portal de anotación. */
+export interface AnnotationSubmission {
+  /** Id de la imagen en el portal de anotación (tabla `images`). */
+  imageId: number;
+  filename: string;
+  /** Toda imagen nueva entra pendiente de anotar. */
+  status: "pending";
   modelVersion: string;
   suggestedClass: string;
   probabilities: Record<string, number>;
-  createdAt: string;
-}
-
-/** Respuesta de GET /api/annotation-queue. */
-export interface ListAnnotationQueueResponse {
-  items: AnnotationQueueItem[];
-  counts: Record<AnnotationStatus, number>;
+  /** Pantalla de anotación de esa imagen. */
+  annotateUrl: string;
+  /** Búsqueda del portal filtrada a las imágenes pendientes. */
+  pendingUrl: string;
 }

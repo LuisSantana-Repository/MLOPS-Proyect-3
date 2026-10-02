@@ -7,6 +7,7 @@ import {
   int,
   mysqlEnum,
   mysqlTable,
+  text,
   timestamp,
   uniqueIndex,
   varchar,
@@ -62,6 +63,20 @@ export const images = mysqlTable(
     status: mysqlEnum('status', ['pending', 'in_progress', 'completed'])
       .notNull()
       .default('pending'),
+
+    // Sugerencia del clasificador (página Inference del portal): clase sugerida,
+    // probabilidades por clase (JSON) y versión del modelo que la produjo.
+    // Son NULL en las imágenes subidas a mano. El anotador las ve como ayuda;
+    // nunca se convierten solas en una anotación.
+    suggestedCategory: varchar('suggested_category', {
+      length: 150,
+    }),
+
+    suggestedProbabilities: text('suggested_probabilities'),
+
+    suggestedModelVersion: varchar('suggested_model_version', {
+      length: 64,
+    }),
 
     // Fecha de creación del registro.
     createdAt: timestamp('created_at').notNull().defaultNow(),

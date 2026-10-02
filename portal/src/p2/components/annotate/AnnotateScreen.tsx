@@ -5,6 +5,7 @@ import { useImageAnnotations } from "../../hooks/useImageAnnotations";
 import { useToasts } from "../../hooks/useToasts";
 import { getImageFileUrl } from "../../lib/api/images";
 import type { AnnotateNavigationState } from "../../types/navigation";
+import { ModelSuggestionBadge } from "../shared/ModelSuggestionBadge";
 import { ToastStack } from "../shared/ToastStack";
 import { Stepper } from "../ui/Stepper";
 import { AnnotationCanvas } from "./AnnotationCanvas";
@@ -293,6 +294,13 @@ export function AnnotateScreen() {
           </button>
         </div>
       )}
+
+      {!isLoading && !loadError && imageMeta?.suggestion ? (
+        <div className="flex items-center gap-2 border-b border-border bg-surface px-4 py-2 text-xs text-ink-muted">
+          <ModelSuggestionBadge suggestion={imageMeta.suggestion} detailed />
+          <span>Enviada desde Inference. Es una ayuda: confirma o corrige al anotar.</span>
+        </div>
+      ) : null}
 
       {!isLoading && !loadError && imageMeta && (
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">

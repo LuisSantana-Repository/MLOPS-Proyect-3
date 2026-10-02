@@ -1,5 +1,5 @@
 import {
-  type ImageRecord,
+  type ImageDetail,
   type ImageSearchResponse,
   type ImageUploadResponse,
   imageDetailResponseSchema,
@@ -138,7 +138,7 @@ export function loadImageDimensions(url: string): Promise<{ width: number; heigh
 // ignora en silencio y se usan los valores por defecto/pasados por
 // navegación — ver `useImageAnnotations`. Ajustar o eliminar esta función si
 // el backend real no la va a implementar.
-export function getImage(imageId: number): Promise<ImageRecord> {
+export function getImage(imageId: number): Promise<ImageDetail> {
   return apiRequest(`/images/${imageId}`, imageDetailResponseSchema);
 }
 

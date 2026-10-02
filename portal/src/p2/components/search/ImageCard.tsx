@@ -1,5 +1,6 @@
 import type { ImageSearchItem } from "@p2/api/schemas";
 import { resolveBackendUrl } from "@p2/lib/api/images";
+import { ModelSuggestionBadge } from "../shared/ModelSuggestionBadge";
 import { CategoryBadge } from "./CategoryBadge";
 import { StatusBadge } from "./StatusBadge";
 
@@ -61,6 +62,7 @@ export function ImageCard({
 
       <div className="flex flex-col gap-2 px-3 py-2.5">
         <StatusBadge status={image.status} />
+        {image.suggestion ? <ModelSuggestionBadge suggestion={image.suggestion} /> : null}
         <div className="flex flex-wrap gap-1">
           {image.categories.length === 0 ? (
             <span className="text-[10px] text-ink-faint">Sin categorías</span>

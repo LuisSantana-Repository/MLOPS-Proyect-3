@@ -36,7 +36,6 @@ export const MODEL_ROUTES: PortalRoute[] = [
   { label: "Evaluation", to: "/evaluation" },
   { label: "Models", to: "/models" },
   { label: "Inference", to: "/inference" },
-  { label: "Cola de anotación", to: "/annotation-queue" },
 ];
 
 /** Pantalla completa de anotación: sin menú, con su propio botón "Volver". */

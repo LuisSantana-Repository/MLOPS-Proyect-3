@@ -24,6 +24,14 @@ export const searchResultCategorySchema = z.object({
   color: z.string(),
 });
 
+/** Sugerencia del clasificador para imágenes enviadas desde Inference. */
+export const modelSuggestionSchema = z.object({
+  category: z.string(),
+  probabilities: z.record(z.string(), z.number()),
+  modelVersion: z.string(),
+});
+export type ModelSuggestion = z.infer<typeof modelSuggestionSchema>;
+
 export const imageSearchItemSchema = z.object({
   id: z.number(),
   filename: z.string(),
@@ -34,6 +42,8 @@ export const imageSearchItemSchema = z.object({
   annotationsCount: z.number(),
   categories: z.array(searchResultCategorySchema),
   createdAt: z.string(),
+  // Solo en imágenes que llegaron desde Inference.
+  suggestion: modelSuggestionSchema.nullish(),
 });
 export type ImageSearchItem = z.infer<typeof imageSearchItemSchema>;
 

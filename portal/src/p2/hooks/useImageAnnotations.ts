@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ModelSuggestion } from "../api/schemas";
 import {
   createAnnotation,
   deleteAnnotation,
@@ -19,6 +20,8 @@ interface ImageMeta {
   height: number;
   status: ImageStatus;
   filename: string;
+  /** Sugerencia del clasificador, si la imagen llegó desde Inference. */
+  suggestion?: ModelSuggestion | null;
 }
 
 type ShowToast = (message: string, variant?: "error" | "success" | "info") => void;
@@ -86,6 +89,7 @@ export function useImageAnnotations(
                     filename: image.filename,
                     width: image.width,
                     height: image.height,
+                    suggestion: image.suggestion ?? null,
                   }
                 : prev,
             );
