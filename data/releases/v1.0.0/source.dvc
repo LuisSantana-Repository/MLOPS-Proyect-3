@@ -1,0 +1,6 @@
+outs:
+- md5: ced4750ad6272fd57647718095b21890.dir
+  size: 229721102
+  nfiles: 690
+  hash: md5
+  path: source

@@ -1,0 +1,6 @@
+outs:
+- md5: e71401992325daf1afec18a340223e21.dir
+  size: 131695513
+  nfiles: 1350
+  hash: md5
+  path: crops
