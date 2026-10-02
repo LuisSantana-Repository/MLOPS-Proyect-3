@@ -260,11 +260,8 @@ y el portal le reenvía `/api/p2/*`.
 | `/search?status=pending` | La imagen enviada desde Inference, pendiente, con la sugerencia del modelo; se anota en `/annotate/<id>` |
 
 `/experiments` lee el MLflow compartido del paso 3: en un clon nuevo muestra las 10 corridas
-de T07 con sus curvas sin reentrenar. `/training`, `/models`, `/inference` y
-`/annotation-queue` funcionan desde el paso 9b, con el modelo publicado en S3.
-`/experiments` y `/evaluation` leen los runs del MLflow de **esta** máquina: en un clon nuevo
-quedan vacías hasta correr los pasos 6–8 (ver "Dónde viven los runs"). `/training`, `/models` e
-`/inference` funcionan desde el paso 9b, con el modelo publicado en S3.
+de T07 con sus curvas sin reentrenar. `/training`, `/models` e `/inference` funcionan desde el
+paso 9b, con el modelo publicado en S3.
 
 Contratos de la API y detalle de cada página: [`portal/README.md`](portal/README.md).
 
