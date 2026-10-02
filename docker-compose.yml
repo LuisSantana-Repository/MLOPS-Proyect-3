@@ -120,6 +120,9 @@ services:
       - ./data:/app/data:ro
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      # Commit de la copia del repo al levantar; el worker no arranca si la imagen se construyó
+      # desde otro (los runs quedarían con un git_commit viejo). Ver REBUILD_HINT en worker.py.
+      EXPECTED_GIT_COMMIT: ${GIT_COMMIT:-}
       # Credenciales de MinIO para el artifact store de MLflow (AWS_* = MinIO).
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}

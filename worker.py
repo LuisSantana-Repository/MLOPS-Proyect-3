@@ -248,10 +248,40 @@ def process_message(message: str, store: JobStore, *, runner: Callable[..., Any]
         return False
 
 
+REBUILD_HINT = "GIT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build"
+
+
+def check_code_commit(baked: str, expected: str) -> str:
+    """Compara el commit horneado en la imagen (build arg) con el de la copia del repo.
+
+    ``trainer.tracking`` etiqueta cada run con ``GIT_COMMIT`` de la imagen; si la imagen
+    quedó vieja, los runs nuevos apuntarían a código que no es el que corre. Falla si los
+    dos commits difieren y avisa si no se pueden comparar. Devuelve el commit de la imagen.
+    """
+    unknown = {"", "no disponible"}
+    if baked in unknown or expected in unknown:
+        log.warning(
+            "no se puede comprobar el commit del código (imagen=%r, repo=%r); los runs pueden quedar con "
+            "un git_commit incorrecto. Arranca con: %s",
+            baked or "no disponible",
+            expected or "sin GIT_COMMIT",
+            REBUILD_HINT,
+        )
+        return baked
+    if baked != expected:
+        raise SystemExit(
+            f"la imagen del worker se construyó con el commit {baked[:12]} pero el repo está en {expected[:12]}; "
+            f"reconstruye antes de entrenar: {REBUILD_HINT}"
+        )
+    return baked
+
+
 def main() -> None:
     import redis
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    commit = check_code_commit(os.getenv("GIT_COMMIT", ""), os.getenv("EXPECTED_GIT_COMMIT", ""))
+    log.info("código del worker en el commit %s", commit)
     queue = redis.Redis(
         host=os.getenv("REDIS_HOST", "localhost"), port=int(os.getenv("REDIS_PORT", "6379")), decode_responses=True
     )
