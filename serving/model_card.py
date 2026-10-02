@@ -200,7 +200,9 @@ def render_card(ctx: CardContext) -> str:
         f"{_code(ctx.tags.get('release_annotations_md5', '—'))}).",
         f"- **Recortes (T03):** una muestra por caja COCO válida; se descartaron {discarded} cajas "
         f"(área menor a {ctx.exclusions.get('parametros', {}).get('min_area', '—')} px²). "
-        f"Recortes versionados en DVC con md5 {_code(ctx.tags.get('crops_dvc_md5', '—'))}.",
+        f"Recortes versionados en DVC con md5 {_code(ctx.tags.get('crops_dvc_md5', '—'))}. "
+        "La caja COCO de origen y el rectángulo recortado de cada uno están en "
+        f"{_code('data/crops/crops_source_boxes.csv')}.",
         "- **Clases incluidas:** las que tienen al menos "
         f"{ctx.exclusions.get('parametros', {}).get('min_images', '—')} imágenes originales. "
         + (

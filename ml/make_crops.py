@@ -7,6 +7,7 @@ genera los artefactos que consume T04:
     <out-dir>/
         crops/<image_id>_<ann_id>.jpg
         crops.csv           crop_path, ann_id, image_id, category_id, category_name, class_index
+        crops_source_boxes.csv  caja COCO de origen y rectángulo recortado de cada recorte
         classes.json        {"0": "clase_a", "1": "clase_b", ...}
         class_counts.csv    conteos por clase + hash del release
         exclusions.json     cajas descartadas por motivo + clases excluidas
@@ -62,6 +63,22 @@ CROPS_CSV_FIELDS = [
     "category_id",
     "category_name",
     "class_index",
+]
+# Coordenadas de origen de cada recorte (P2-1): la caja COCO [x, y, w, h] tal como viene
+# en el release y el rectángulo realmente recortado (floor/ceil, acotado a la imagen).
+SOURCE_BOXES_CSV = "crops_source_boxes.csv"
+SOURCE_BOXES_FIELDS = [
+    "ann_id",
+    "image_id",
+    "category_id",
+    "bbox_x",
+    "bbox_y",
+    "bbox_w",
+    "bbox_h",
+    "crop_left",
+    "crop_top",
+    "crop_right",
+    "crop_bottom",
 ]
 COUNTS_CSV_FIELDS = [
     "category_id",
@@ -192,14 +209,66 @@ def build_class_map(stats: list[dict]) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def crop_box(img: Image.Image, bbox: list[float]) -> Image.Image:
-    """Recorta con floor/ceil para no perder píxeles de bordes fraccionarios."""
+def crop_bounds(bbox: list[float], img_w: int, img_h: int) -> tuple[int, int, int, int]:
+    """Rectángulo (left, top, right, bottom) que se recorta para una caja COCO:
+    floor/ceil para no perder píxeles de bordes fraccionarios, acotado a la imagen."""
     x, y, w, h = (float(v) for v in bbox)
     left = max(0, math.floor(x))
     top = max(0, math.floor(y))
-    right = min(img.width, math.ceil(x + w))
-    bottom = min(img.height, math.ceil(y + h))
-    return img.crop((left, top, right, bottom))
+    right = min(img_w, math.ceil(x + w))
+    bottom = min(img_h, math.ceil(y + h))
+    return left, top, right, bottom
+
+
+def crop_box(img: Image.Image, bbox: list[float]) -> Image.Image:
+    """Recorta el rectángulo de `crop_bounds`."""
+    return img.crop(crop_bounds(bbox, img.width, img.height))
+
+
+def _number(value: Any) -> str:
+    """Número del COCO sin perder precisión: 10.0 → "10", 50.5 → "50.5".
+    `repr` da la forma más corta que vuelve exactamente al mismo float."""
+    number = float(value)
+    return str(int(number)) if number.is_integer() else repr(number)
+
+
+def source_box_rows(coco: dict, crop_rows: list[dict]) -> list[dict]:
+    """Una fila por recorte de `crop_rows` (mismo orden) con su caja de origen en el COCO.
+
+    Lanza InputError si un recorte no está en el COCO o si cambió su imagen o su clase:
+    el archivo solo se escribe si el COCO es el mismo con el que se generaron los recortes.
+    """
+    annotations = {a["id"]: a for a in coco["annotations"]}
+    images = {img["id"]: img for img in coco["images"]}
+    rows = []
+    for crop in crop_rows:
+        ann_id = int(crop["ann_id"])
+        ann = annotations.get(ann_id)
+        if ann is None:
+            raise InputError(f"el recorte de la anotación {ann_id} no está en el COCO del release")
+        if int(crop["image_id"]) != ann["image_id"] or int(crop["category_id"]) != ann["category_id"]:
+            raise InputError(f"la anotación {ann_id} cambió de imagen o de clase respecto a crops.csv")
+        img = images.get(ann["image_id"])
+        if img is None:
+            raise InputError(f"la imagen {ann['image_id']} de la anotación {ann_id} no está en el COCO")
+        x, y, w, h = ann["bbox"]
+        left, top, right, bottom = crop_bounds(ann["bbox"], img["width"], img["height"])
+        rows.append(
+            {
+                "ann_id": ann_id,
+                "image_id": ann["image_id"],
+                "category_id": ann["category_id"],
+                "bbox_x": _number(x),
+                "bbox_y": _number(y),
+                "bbox_w": _number(w),
+                "bbox_h": _number(h),
+                "crop_left": left,
+                "crop_top": top,
+                "crop_right": right,
+                "crop_bottom": bottom,
+            }
+        )
+    return rows
 
 
 def write_crops(
@@ -370,6 +439,7 @@ def run(args: argparse.Namespace) -> None:
         r["annotations_md5"] = info["annotations_md5"]
 
     _write_csv(out_dir / "crops.csv", CROPS_CSV_FIELDS, rows)
+    _write_csv(out_dir / SOURCE_BOXES_CSV, SOURCE_BOXES_FIELDS, source_box_rows(coco, rows))
     _write_csv(out_dir / "class_counts.csv", COUNTS_CSV_FIELDS, stats)
     (out_dir / "classes.json").write_text(
         json.dumps(build_class_map(stats), ensure_ascii=False, indent=2) + "\n",
