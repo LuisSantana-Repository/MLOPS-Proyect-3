@@ -1,0 +1,14 @@
+# proyecto2 v1.0.0 @ 9c0b9a4e11357cd79198e43e2cc6ed83c50c10c1
+# data/raw.dvc
+outs:
+- md5: 2ae957bda56b5cf9293fd620b781e699.dir
+  size: 229721102
+  nfiles: 690
+  hash: md5
+  path: raw
+# data/annotations/coco-dataset.json.dvc
+outs:
+- md5: fb3118e0aaa6aece8b70417d76b8eba7
+  size: 475412
+  hash: md5
+  path: coco-dataset.json

@@ -13,6 +13,14 @@ const createJob = vi.fn();
 const enqueueTrainingJob = vi.fn();
 
 vi.mock("@/lib/jobs", () => ({ createJob: (...a: unknown[]) => createJob(...a) }));
+// La validación del release y de su manifiesto tiene sus propios tests (route.release.test.ts).
+vi.mock("@/lib/repo-artifacts", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/repo-artifacts")>();
+  return {
+    ...original,
+    requireApprovedRelease: async () => ({ paths: original.DEFAULT_RELEASE_PATHS }),
+  };
+});
 vi.mock("@/lib/queue", () => ({
   enqueueTrainingJob: (...a: unknown[]) => enqueueTrainingJob(...a),
 }));

@@ -43,6 +43,13 @@ export interface QualityGateEvidence {
   checks: { name: string; status: string; severity: string; threshold: number | null }[];
 }
 
+/** Rutas (relativas a la raíz del repo) de los datos de un release. */
+export interface ReleasePaths {
+  manifest: string;
+  classes: string;
+  dataRoot: string;
+}
+
 /** Un release aprobado con su procedencia y el split que lo acompaña. */
 export interface ApprovedRelease {
   /** Tag del release, p. ej. "proyecto2 v1.1.0@dc9376e". Es el `release` del job. */
@@ -57,6 +64,11 @@ export interface ApprovedRelease {
     /** MD5 DVC de la carpeta de recortes. */
     cropsMd5: string | null;
   };
+  /**
+   * Dónde están los datos de ESTE release en el repo (cada release tiene su manifiesto
+   * derivado en una ruta propia). Es lo que recibe el worker al entrenar.
+   */
+  paths: ReleasePaths;
   /** Compuerta de calidad del Proyecto 2: versión, veredicto, reporte y política. */
   quality: QualityGateEvidence;
   classes: string[];

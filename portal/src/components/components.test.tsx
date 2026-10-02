@@ -20,6 +20,11 @@ const release: ApprovedRelease = {
     manifestMd5: "e75a07ce3b75455514f044b23e0d1b29",
     cropsMd5: null,
   },
+  paths: {
+    manifest: "data/splits/manifest.csv",
+    classes: "data/crops/classes.json",
+    dataRoot: "data/crops",
+  },
   quality: {
     status: "pass",
     exitCode: 0,
@@ -95,6 +100,47 @@ describe("ReleaseSelector", () => {
     expect(html).toContain("270 (20%)");
     expect(html).toContain("135 (10%)");
     expect(html).toContain("fuga 0 ✓");
+  });
+
+  it("al cambiar de release cambian los conteos, el hash y el manifiesto (Actividad A, 1.1)", () => {
+    const previous: ApprovedRelease = {
+      ...release,
+      tag: "proyecto2 v1.0.0@9c0b9a4",
+      provenance: { ...release.provenance, manifestMd5: "aaaaaaaaaaaa0000000000000000ffff" },
+      paths: {
+        manifest: "data/releases/v1.0.0/splits/manifest.csv",
+        classes: "data/releases/v1.0.0/crops/classes.json",
+        dataRoot: "data/releases/v1.0.0/crops",
+      },
+      quality: {
+        ...release.quality,
+        version: "v1.0.0",
+        dataHash: "2ae957bda56b5cf9293fd620b781e699",
+      },
+      split: {
+        ...release.split,
+        totals: { train: 945, val: 270, test: 135, total: 1350 },
+      },
+    };
+    const render = (tag: string) =>
+      renderToStaticMarkup(
+        <ReleaseSelector releases={[release, previous]} selectedTag={tag} onChange={noop} />,
+      );
+
+    const current = render(release.tag);
+    expect(current).toContain("944 (70%)");
+    expect(current).toContain("e75a07ce3b75");
+    expect(current).toContain("data/splits/manifest.csv");
+
+    const other = render(previous.tag);
+    expect(other).toContain("945 (70%)");
+    expect(other).not.toContain("944 (70%)");
+    expect(other).toContain("aaaaaaaaaaaa");
+    expect(other).toContain("2ae957bda56b");
+    expect(other).toContain("data/releases/v1.0.0/splits/manifest.csv");
+    // Los dos releases se pueden elegir.
+    expect(other).toContain(`<option value="${release.tag}"`);
+    expect(other).toContain(`<option value="${previous.tag}"`);
   });
 
   it("muestra la evidencia de la compuerta de calidad del release (P1-1)", () => {

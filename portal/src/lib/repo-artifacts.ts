@@ -1,12 +1,14 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ApprovedRelease,
   type CandidateSelectionResponse,
+  type ReleasePaths,
   SPLIT_NAMES,
   type SplitCounts,
 } from "@/contracts";
 import { ApiError, badRequest, notFound } from "@/lib/http";
+import { verifyManifest } from "@/lib/manifest-leakage";
 import { evaluateQualityGate } from "@/lib/release-gate";
 
 /**
@@ -23,6 +25,60 @@ export const ARTIFACTS = {
   manifestDvc: "data/splits/manifest.csv.dvc",
   selection: "reports/t07/selection.json",
 } as const;
+
+/**
+ * Dónde vive un release en el repo. El entregado (T03/T04) está en `data/crops` y
+ * `data/splits`; los demás, cada uno en `data/releases/<versión>/{crops,splits}`, para no
+ * tocar el manifiesto entregado.
+ */
+export interface ReleaseLayout {
+  crops: string;
+  splits: string;
+}
+
+export const DEFAULT_LAYOUT: ReleaseLayout = { crops: "data/crops", splits: "data/splits" };
+export const RELEASES_DIR = "data/releases";
+
+function artifactsOf(layout: ReleaseLayout) {
+  return {
+    releaseInfo: `${layout.crops}/release_info.json`,
+    classes: `${layout.crops}/classes.json`,
+    cropsDvc: `${layout.crops}/crops.dvc`,
+    splitReport: `${layout.splits}/split_report.csv`,
+    leakageReport: `${layout.splits}/leakage_report.json`,
+    manifestDvc: `${layout.splits}/manifest.csv.dvc`,
+    manifest: `${layout.splits}/manifest.csv`,
+  };
+}
+
+function pathsOf(layout: ReleaseLayout): ReleasePaths {
+  const a = artifactsOf(layout);
+  return { manifest: a.manifest, classes: a.classes, dataRoot: layout.crops };
+}
+
+/** Rutas del release entregado: las que usa un job si no se indica otro release. */
+export const DEFAULT_RELEASE_PATHS: ReleasePaths = pathsOf(DEFAULT_LAYOUT);
+
+/** El release entregado y, después, los de `data/releases/*` en orden de versión. */
+export async function releaseLayouts(root: string): Promise<ReleaseLayout[]> {
+  let versions: string[] = [];
+  try {
+    const entries = await readdir(join(root, RELEASES_DIR), { withFileTypes: true });
+    versions = entries
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  return [
+    DEFAULT_LAYOUT,
+    ...versions.map((v) => ({
+      crops: `${RELEASES_DIR}/${v}/crops`,
+      splits: `${RELEASES_DIR}/${v}/splits`,
+    })),
+  ];
+}
 
 async function readText(root: string, path: string): Promise<string | null> {
   try {
@@ -117,25 +173,28 @@ export type ReleaseDecision =
   | { approved: false; tag: string; reason: string };
 
 /**
- * Evalúa el release con el que T03 generó los recortes (release_info.json):
- * debe pasar la compuerta de calidad del Proyecto 2 y tener su manifiesto 70/20/10
- * versionado y sin fuga.
+ * Evalúa un release (su `release_info.json`): debe pasar la compuerta de calidad del
+ * Proyecto 2 y tener su manifiesto 70/20/10 versionado y sin fuga.
  */
-export async function evaluateRelease(root: string): Promise<ReleaseDecision> {
-  const info = await readJson<ReleaseInfoFile>(root, ARTIFACTS.releaseInfo);
-  if (!info) throw notFound(`No hay release aprobado: falta ${ARTIFACTS.releaseInfo}`);
+export async function evaluateRelease(
+  root: string,
+  layout: ReleaseLayout = DEFAULT_LAYOUT,
+): Promise<ReleaseDecision> {
+  const files = artifactsOf(layout);
+  const info = await readJson<ReleaseInfoFile>(root, files.releaseInfo);
+  if (!info) throw notFound(`No hay release aprobado: falta ${files.releaseInfo}`);
   const tag = info.release_tag;
   const rejected = (reason: string): ReleaseDecision => ({ approved: false, tag, reason });
 
   const gate = await evaluateQualityGate(root, tag, dvcMd5(info.dvc_file_content ?? null));
   if (!gate.approved) return rejected(gate.reason);
 
-  const splitText = await readText(root, ARTIFACTS.splitReport);
-  const manifestMd5 = dvcMd5(await readText(root, ARTIFACTS.manifestDvc));
+  const splitText = await readText(root, files.splitReport);
+  const manifestMd5 = dvcMd5(await readText(root, files.manifestDvc));
   if (splitText === null || !manifestMd5) {
-    return rejected(`falta su manifiesto 70/20/10 (${ARTIFACTS.manifestDvc})`);
+    return rejected(`falta su manifiesto 70/20/10 (${files.manifestDvc})`);
   }
-  const leakage = await readJson<LeakageReportFile>(root, ARTIFACTS.leakageReport);
+  const leakage = await readJson<LeakageReportFile>(root, files.leakageReport);
   if (leakage?.fuga?.total !== 0) {
     return rejected(
       leakage
@@ -144,7 +203,7 @@ export async function evaluateRelease(root: string): Promise<ReleaseDecision> {
     );
   }
 
-  const classesFile = await readJson<Record<string, string> | string[]>(root, ARTIFACTS.classes);
+  const classesFile = await readJson<Record<string, string> | string[]>(root, files.classes);
   const classes = Array.isArray(classesFile)
     ? classesFile
     : Object.entries(classesFile ?? {})
@@ -160,8 +219,9 @@ export async function evaluateRelease(root: string): Promise<ReleaseDecision> {
         sourceCommit: sourceCommit(info.dvc_file_content),
         annotationsMd5: info.annotations_md5,
         manifestMd5,
-        cropsMd5: dvcMd5(await readText(root, ARTIFACTS.cropsDvc)),
+        cropsMd5: dvcMd5(await readText(root, files.cropsDvc)),
       },
+      paths: pathsOf(layout),
       quality: gate.evidence,
       classes,
       split: {
@@ -174,29 +234,48 @@ export async function evaluateRelease(root: string): Promise<ReleaseDecision> {
   };
 }
 
+/**
+ * Evalúa todos los releases del repo. El entregado debe existir (404 si falta su
+ * release_info.json); una carpeta de `data/releases/` sin release_info.json se ignora.
+ */
+export async function evaluateReleases(root: string): Promise<ReleaseDecision[]> {
+  const [delivered, ...others] = await releaseLayouts(root);
+  const decisions = [await evaluateRelease(root, delivered)];
+  for (const layout of others) {
+    try {
+      decisions.push(await evaluateRelease(root, layout));
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 404)) throw err;
+    }
+  }
+  return decisions;
+}
+
 /** Releases con compuerta de calidad aprobada y manifiesto sin fuga (P1-1). */
 export async function readApprovedReleases(root: string): Promise<ApprovedRelease[]> {
-  const decision = await evaluateRelease(root);
-  return decision.approved ? [decision.release] : [];
+  const decisions = await evaluateReleases(root);
+  return decisions.flatMap((d) => (d.approved ? [d.release] : []));
 }
 
 /**
- * Valida el release de un job ANTES de crearlo: debe existir y estar aprobado.
- * Lanza 400 con el motivo; así un release no aprobado nunca llega a `training_jobs`.
+ * Valida el release de un job ANTES de crearlo: debe existir, estar aprobado y su
+ * manifiesto ACTUAL (el archivo que usará el worker) no debe tener cruces entre
+ * particiones. Lanza 400 con el motivo; así un job inválido nunca llega a `training_jobs`.
  */
 export async function requireApprovedRelease(root: string, tag: string): Promise<ApprovedRelease> {
-  let decision: ReleaseDecision;
+  let decisions: ReleaseDecision[];
   try {
-    decision = await evaluateRelease(root);
+    decisions = await evaluateReleases(root);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       throw badRequest("No hay ningún release aprobado para entrenar", { release: [err.message] });
     }
     throw err;
   }
-  if (decision.tag !== tag) {
+  const decision = decisions.find((d) => d.tag === tag);
+  if (!decision) {
     throw badRequest(`El release "${tag}" no existe entre los releases del Proyecto 2`, {
-      release: [`Release desconocido. Disponible: ${decision.tag}`],
+      release: [`Release desconocido. Disponibles: ${decisions.map((d) => d.tag).join(", ")}`],
     });
   }
   if (!decision.approved) {
@@ -204,7 +283,9 @@ export async function requireApprovedRelease(root: string, tag: string): Promise
       release: [decision.reason],
     });
   }
-  return decision.release;
+  const { release } = decision;
+  await verifyManifest(root, release.paths.manifest, release.provenance.manifestMd5);
+  return release;
 }
 
 interface SelectionFile {
