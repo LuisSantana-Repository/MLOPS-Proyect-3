@@ -22,7 +22,8 @@ vi.mock("@/lib/published-models", () => ({
 }));
 
 // T12: evaluación de test calculada desde predictions.csv de T08.
-vi.mock("@/lib/test-evaluation", () => ({
+vi.mock("@/lib/test-evaluation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/test-evaluation")>()),
   loadTestEvaluation: (...a: unknown[]) => loadTestEvaluation(...a),
 }));
 
