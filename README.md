@@ -80,9 +80,16 @@ pero las necesitan los contenedores `worker` e `inference`.
 ### 3. Levantar el stack
 
 ```bash
+dvc pull mlflow-store.dvc                   # MLflow compartido: 10 corridas de T07 + registry (~590 MB)
 GIT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build
 docker compose ps
 ```
+
+`mlflow-store/` es el MLflow del equipo, versionado con DVC (ver "Dónde viven los runs"):
+`mlflow.db` (backend SQLite) y `artifacts/`, que `createbuckets` carga en MinIO. Sin él,
+`mlflow` no arranca y lo dice en `docker compose logs mlflow`. `GIT_COMMIT` es obligatorio
+para que los runs nuevos queden con el commit correcto: si la imagen del worker se
+construyó desde otro commit, el worker no arranca y muestra el comando para reconstruir.
 
 La primera vez construye las imágenes (unos minutos). **Comprobación:**
 
@@ -162,6 +169,18 @@ hiperparámetros variados y `reports/t07/selection.json` congela el candidato **
 abrir el test (`test_split_used: false`). El candidato versionado es el run
 `fe32e1388dbd465cae714a69bf80f685` (exp-07).
 
+Las 10 corridas originales ya están en el MLflow compartido (paso 3), así que **no hace falta
+reentrenar** para auditarlas. Con el paso 5 cargado:
+
+```bash
+python -m scripts.verify_mlflow                              # 10 runs, curvas, artefactos, pesos, registry
+python -m trainer.sweep report configs/experiments/t07.yaml  # misma selección
+git status --short reports/t07                               # vacío: el reporte sale idéntico
+```
+
+`verify_mlflow` solo lee y termina con `Resultado: OK` (salida completa en
+[`docs/correcciones-evaluacion.md`](docs/correcciones-evaluacion.md)).
+
 ### 8. Evaluación final en test (T08) — una sola vez
 
 ```bash
@@ -228,9 +247,9 @@ npm run dev                 # http://localhost:3000
 | `/inference` | Clasificar una imagen nueva o un recorte; probabilidades, versión y hash usados |
 | `/annotation-queue` | El elemento enviado desde Inference, pendiente de anotar |
 
-`/experiments` y `/evaluation` leen los runs del MLflow de **esta** máquina: en un clon nuevo
-quedan vacías hasta correr los pasos 6–8 (ver "Dónde viven los runs"). `/training`, `/models`,
-`/inference` y `/annotation-queue` funcionan desde el paso 9b, con el modelo publicado en S3.
+`/experiments` lee el MLflow compartido del paso 3: en un clon nuevo muestra las 10 corridas
+de T07 con sus curvas sin reentrenar. `/training`, `/models`, `/inference` y
+`/annotation-queue` funcionan desde el paso 9b, con el modelo publicado en S3.
 
 Contratos de la API y detalle de cada página: [`portal/README.md`](portal/README.md).
 
@@ -253,10 +272,15 @@ El servicio descarga el paquete de S3 la primera vez, verifica el SHA-256 contra
 Cada valor se puede volver a obtener con los comandos de arriba; el portal enlaza la
 misma cadena (release → run → versión → predicción) entre sus páginas.
 
-> **Dónde viven los runs.** MLflow guarda los runs en la MariaDB y el MinIO del stack
-> (volúmenes de Docker de la máquina que los ejecutó). En un clon nuevo el MLflow arranca
-> vacío: los pasos 6–8 vuelven a generar los runs, mientras que los resultados de T07/T08,
-> el modelo publicado (S3) y su tarjeta ya están versionados y no dependen de ese MLflow.
+> **Dónde viven los runs.** En `mlflow-store/`, versionado con DVC en
+> `s3://ml-models-proyecto3-2c1a70d3/dvc` (`mlflow-store.dvc`): el backend de MLflow en SQLite
+> y los artefactos de cada run. Es una copia fila por fila del MLflow original de la máquina
+> que corrió el barrido (mismos run IDs, métricas por época, tags, artefactos y Model
+> Registry, más el alias `clasificador@champion`), hecha con `scripts/mlflow_snapshot.py`.
+> Las URIs de artefactos (`s3://mlflow/1/<run>/artifacts`) no se reescribieron: al arrancar,
+> `createbuckets` carga los artefactos en el bucket `mlflow` de MinIO. Los runs nuevos se
+> agregan a ese mismo store; para compartirlos, `scripts/mlflow_share.sh` (espeja artefactos,
+> `dvc add` y `dvc push`) y commit de `mlflow-store.dvc`.
 
 ## Calidad
 
