@@ -94,4 +94,20 @@ export interface EvaluationResponse {
   classes: string[] | null;
   /** Evaluación de test calculada desde predictions.csv de T08; null si el run aún no se evalúa (T12). */
   test: TestEvaluation | null;
+  /** Versión del dataset con que se entrenó y evaluó la versión (6.3). */
+  dataset: EvaluationDataset;
+}
+
+/** Versión de los DATOS de una evaluación: release del Proyecto 2 y hashes DVC. */
+export interface EvaluationDataset {
+  /** Release DVC aprobado del Proyecto 2 (p. ej. `proyecto2 v1.1.0@dc9376e`). */
+  release: string | null;
+  /** md5 DVC de `data/raw` (imágenes) del release del Proyecto 2. */
+  rawDvcMd5: string | null;
+  /** md5 DVC del COCO de anotaciones del release. */
+  annotationsMd5: string | null;
+  /** md5 DVC del manifiesto 70/20/10 (`data/splits/manifest.csv.dvc`). */
+  manifestDvcMd5: string | null;
+  /** SHA-256 del manifiesto con que se entrenó el run (tag `manifest_sha256`). */
+  manifestSha256: string | null;
 }

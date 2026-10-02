@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import type {
   CandidateSelectionResponse,
+  EvaluationDataset,
   EvaluationResponse,
   ListModelsResponse,
   ModelVersionInfo,
@@ -13,14 +14,15 @@ import { errorMessage, fetchJson } from "@/lib/ui/api-client";
 import {
   chooseDefaultModel,
   type DefaultModelChoice,
+  formatPercent,
   isWinner,
   modelKey,
 } from "@/lib/ui/evaluation";
 import { experimentsRunHref, modelsHref, predictionsExportHref } from "@/lib/ui/links";
 import { ClassMetricsTable } from "./ClassMetricsTable";
 import { ConfusionHeatmap } from "./ConfusionHeatmap";
-import { ErrorGallery } from "./ErrorGallery";
 import { MetricCards } from "./MetricCards";
+import { PredictionGallery } from "./PredictionGallery";
 import { StateMessage } from "./StateMessage";
 
 type Load<T> =
@@ -218,6 +220,50 @@ export function EvaluationDashboard({ initialModel }: { initialModel: string | n
   );
 }
 
+/** Versión de los DATOS evaluados: release del Proyecto 2 y hashes DVC (6.3). */
+export function DatasetVersion({ dataset }: { dataset: EvaluationDataset }) {
+  const rows: [string, string | null][] = [
+    ["Release DVC (Proyecto 2)", dataset.release],
+    ["md5 DVC de data/raw (imágenes)", dataset.rawDvcMd5],
+    ["md5 DVC de las anotaciones COCO", dataset.annotationsMd5],
+    ["md5 DVC del manifiesto 70/20/10", dataset.manifestDvcMd5],
+    ["SHA-256 del manifiesto (run)", dataset.manifestSha256],
+  ];
+  return (
+    <dl className="kv">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>
+            {/* Los hashes no tienen espacios: se parten en cualquier carácter para no desbordar. */}
+            <code style={{ overflowWrap: "anywhere" }}>{value ?? "—"}</code>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Accuracy de predecir siempre la clase más frecuente del MISMO test (4.4). */
+export function majorityBaseline(test: TestEvaluation): { className: string; accuracy: number } {
+  const [className, support] = Object.entries(test.perClass)
+    .map(([c, m]) => [c, m.support] as const)
+    .sort((a, b) => b[1] - a[1])[0];
+  return { className, accuracy: test.nSamples ? support / test.nSamples : 0 };
+}
+
+export function BaselineComparison({ test }: { test: TestEvaluation }) {
+  const base = majorityBaseline(test);
+  const gain = (test.accuracy - base.accuracy) * 100;
+  return (
+    <p className="muted">
+      Baseline de clase mayoritaria (siempre <code>{base.className}</code>):{" "}
+      <strong>{formatPercent(base.accuracy)}</strong>. El modelo está{" "}
+      {gain >= 0 ? `${gain.toFixed(1)} pp por encima` : `${(-gain).toFixed(1)} pp por debajo`}.
+    </p>
+  );
+}
+
 /** De dónde salió la evaluación y enlace para exportar predictions.csv (P1-3). */
 export function EvaluationSource({ data }: { data: EvaluationResponse }) {
   const { test } = data;
@@ -268,6 +314,8 @@ function EvaluationView({
           Run de MLflow: <code>{data.runId ?? "—"}</code>
         </p>
         <EvaluationSource data={data} />
+        <h3>Versión del dataset</h3>
+        <DatasetVersion dataset={data.dataset} />
         <EvaluationLinks runId={data.runId} modelVersion={data.modelVersion} />
         {!winner && winnerRunId ? (
           <p className="muted">
@@ -285,6 +333,7 @@ function EvaluationView({
       ) : (
         <>
           <MetricCards test={test} />
+          <BaselineComparison test={test} />
           <ConsistencyNote test={test} />
           <section className="card">
             <h2>Por clase</h2>
@@ -295,8 +344,11 @@ function EvaluationView({
             <ConfusionHeatmap confusion={test.confusionMatrix} />
           </section>
           <section className="card">
-            <h2>Errores</h2>
-            <ErrorGallery errors={test.errors} classes={test.classes} />
+            <h2>Aciertos y errores</h2>
+            <PredictionGallery
+              predictions={test.predictions ?? test.errors}
+              classes={test.classes}
+            />
           </section>
         </>
       )}
