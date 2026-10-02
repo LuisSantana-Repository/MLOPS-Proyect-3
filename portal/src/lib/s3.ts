@@ -28,13 +28,24 @@ export interface S3Store {
 
 const MODEL_NAME = "clasificador";
 
-/** Archivos que T10 publica por versión (serving/storage.py::PACKAGE_FILES). */
+/**
+ * Archivos mínimos que toda versión publicada tiene, incluida la 1.0.0 congelada
+ * (serving/storage.py::REQUIRED_PACKAGE_FILES). La verificación de "published" usa
+ * estos: un paquete sin ellos nunca se muestra como publicado.
+ */
 export const MODEL_PACKAGE_FILES = [
   "weights.pt",
   "classes.json",
   "preprocess.json",
   "summary.json",
 ] as const;
+
+/**
+ * Archivos de entorno del paquete completo (T16/5.1, serving/storage.py::ENV_PACKAGE_FILES).
+ * Las versiones nuevas los incluyen; la 1.0.0 congelada no, y por eso NO entran en el
+ * criterio de "published" sino en el reporte de completitud del entorno.
+ */
+export const MODEL_ENV_FILES = ["config.json", "env.json", "requirements.lock"] as const;
 
 /** Tarjeta del modelo en Markdown (T15); opcional en el paquete. */
 export const MODEL_CARD_FILE = "model_card.md";

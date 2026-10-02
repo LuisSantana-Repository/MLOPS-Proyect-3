@@ -43,11 +43,19 @@ export const PUBLICATION_STATUSES = ["published", "incomplete", "unverified"] as
 export type PublicationStatus = (typeof PUBLICATION_STATUSES)[number];
 
 export interface ModelPublication {
-  /** published = todos los archivos existen en S3; incomplete = falta alguno; unverified = no se pudo consultar S3. */
+  /** published = están los archivos mínimos en S3; incomplete = falta alguno; unverified = no se pudo consultar S3. */
   status: PublicationStatus;
   missingFiles: string[];
   checkedAt: string;
   message: string | null;
+  /**
+   * Paquete completo (T16/5.1): el modelo trae además el entorno y las dependencias
+   * fijadas (config.json, env.json, requirements.lock). La 1.0.0 congelada no los tiene
+   * y sigue "published"; las versiones nuevas sí deben traerlos.
+   */
+  envComplete: boolean;
+  /** Archivos de entorno presentes en S3 (subconjunto de config.json/env.json/requirements.lock). */
+  envFiles: string[];
 }
 
 export interface ModelMetrics {

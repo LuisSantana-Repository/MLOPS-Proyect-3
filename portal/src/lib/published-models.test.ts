@@ -53,14 +53,31 @@ beforeEach(() => {
 });
 
 describe("checkPublication", () => {
-  it("published cuando existen los 4 archivos del paquete", async () => {
-    const pub = await checkPublication(store, "1.0.0");
+  it("published y envComplete cuando están los mínimos + los de entorno (paquete completo)", async () => {
+    const pub = await checkPublication(store, "2.0.0");
     expect(pub).toMatchObject({ status: "published", missingFiles: [], message: null });
-    expect(objectExists).toHaveBeenCalledWith(store, "models/clasificador/1.0.0/weights.pt");
-    expect(objectExists).toHaveBeenCalledTimes(4);
+    expect(objectExists).toHaveBeenCalledWith(store, "models/clasificador/2.0.0/weights.pt");
+    // 4 archivos mínimos + 3 de entorno (config.json, env.json, requirements.lock).
+    expect(objectExists).toHaveBeenCalledTimes(7);
+    expect(pub.envComplete).toBe(true);
+    expect(pub.envFiles).toEqual(["config.json", "env.json", "requirements.lock"]);
   });
 
-  it("incomplete y lista lo que falta si un archivo no está en S3", async () => {
+  it("1.0.0 congelada: published pero sin paquete de entorno (envComplete=false)", async () => {
+    // La 1.0.0 solo tiene los 4 mínimos; los de entorno no existen.
+    objectExists.mockImplementation(async (_s: unknown, key: string) =>
+      ["weights.pt", "classes.json", "preprocess.json", "summary.json"].some((f) =>
+        key.endsWith(f),
+      ),
+    );
+    const pub = await checkPublication(store, "1.0.0");
+    expect(pub.status).toBe("published"); // los mínimos están → sigue publicada
+    expect(pub.missingFiles).toEqual([]);
+    expect(pub.envComplete).toBe(false);
+    expect(pub.envFiles).toEqual([]);
+  });
+
+  it("incomplete y lista lo que falta si un archivo mínimo no está en S3", async () => {
     objectExists.mockImplementation(
       async (_s: unknown, key: string) => !key.endsWith("weights.pt"),
     );
@@ -75,6 +92,7 @@ describe("checkPublication", () => {
     const pub = await checkPublication(store, "1.0.0");
     expect(pub.status).toBe("unverified");
     expect(pub.message).toContain("timeout");
+    expect(pub.envComplete).toBe(false);
   });
 });
 

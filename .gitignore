@@ -33,3 +33,7 @@ dummy_artifact.txt
 .pytest-tmp/
 model-cache/
 /mlflow-store
+
+# Respaldos locales de objetos de S3 (pesos del modelo, no van en Git)
+/backups/
+_models_listing.json

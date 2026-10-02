@@ -77,9 +77,11 @@ class ModelCache:
         settings = self.s3_settings()
         client = storage.make_s3_client(settings)
 
-        # Se re-descarga si falta CUALQUIER archivo del paquete, no solo weights.pt:
-        # una descarga previa interrumpida pudo dejar el paquete incompleto.
-        complete = all((package_dir / name).is_file() for name in storage.PACKAGE_FILES)
+        # Se re-descarga si falta CUALQUIER archivo mínimo (no solo weights.pt): una
+        # descarga previa interrumpida pudo dejar el paquete incompleto. La inferencia
+        # solo necesita el conjunto mínimo (pesos, clases, preprocess, summary); los
+        # archivos de entorno (config/env/requirements.lock) no hacen falta para cargar.
+        complete = all((package_dir / name).is_file() for name in storage.REQUIRED_PACKAGE_FILES)
         if not complete:
             log.info("descargando versión %s de s3://%s", version, settings.bucket)
             storage.download_package(client, settings.bucket, version, package_dir)

@@ -43,6 +43,8 @@ function model(extra: Partial<ModelVersionInfo> = {}): ModelVersionInfo {
       missingFiles: [],
       checkedAt: "2026-09-30T00:00:00Z",
       message: null,
+      envComplete: true,
+      envFiles: ["config.json", "env.json", "requirements.lock"],
     },
     files: ["weights.pt"],
     hasModelCard: false,
@@ -109,6 +111,8 @@ describe("/models: enlaces a evaluación y curvas", () => {
     const incomplete = model({
       publication: {
         status: "incomplete",
+        envComplete: false,
+        envFiles: [],
         missingFiles: ["weights.pt"],
         checkedAt: "x",
         message: null,

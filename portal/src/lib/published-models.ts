@@ -7,6 +7,7 @@ import { ApiError, notFound } from "@/lib/http";
 import { getRun, type NormalizedModelVersion, searchModelVersions } from "@/lib/mlflow";
 import {
   MODEL_CARD_FILE,
+  MODEL_ENV_FILES,
   MODEL_PACKAGE_FILES,
   modelKey,
   modelStore,
@@ -68,20 +69,32 @@ export async function requirePublishedRow(version: string): Promise<PublishedMod
   return row;
 }
 
-/** Verifica en S3 que existan todos los archivos del paquete. */
+/**
+ * Verifica en S3 el estado de publicación de una versión.
+ *
+ * El estado "published" exige los archivos MÍNIMOS (los que tiene toda versión, incl. la
+ * 1.0.0 congelada). Además reporta la completitud del paquete de entorno (T16/5.1):
+ * `envComplete`/`envFiles` dicen si trae config.json, env.json y requirements.lock. Así
+ * la 1.0.0 sigue "published" aunque no tenga los de entorno, y las versiones nuevas
+ * muestran que el paquete está completo.
+ */
 export async function checkPublication(store: S3Store, version: string): Promise<ModelPublication> {
   const checkedAt = new Date().toISOString();
   try {
-    const exists = await Promise.all(
-      MODEL_PACKAGE_FILES.map((f) => objectExists(store, modelKey(version, f))),
-    );
-    const missingFiles = MODEL_PACKAGE_FILES.filter((_, i) => !exists[i]);
+    const [required, env] = await Promise.all([
+      Promise.all(MODEL_PACKAGE_FILES.map((f) => objectExists(store, modelKey(version, f)))),
+      Promise.all(MODEL_ENV_FILES.map((f) => objectExists(store, modelKey(version, f)))),
+    ]);
+    const missingFiles = MODEL_PACKAGE_FILES.filter((_, i) => !required[i]);
+    const envFiles = MODEL_ENV_FILES.filter((_, i) => env[i]);
     return {
       status: missingFiles.length === 0 ? "published" : "incomplete",
       missingFiles,
       checkedAt,
       message:
         missingFiles.length === 0 ? null : `Faltan en ${store.label}: ${missingFiles.join(", ")}`,
+      envComplete: envFiles.length === MODEL_ENV_FILES.length,
+      envFiles,
     };
   } catch (err) {
     return {
@@ -89,6 +102,8 @@ export async function checkPublication(store: S3Store, version: string): Promise
       missingFiles: [],
       checkedAt,
       message: err instanceof Error ? err.message : String(err),
+      envComplete: false,
+      envFiles: [],
     };
   }
 }
@@ -147,6 +162,8 @@ export async function toModelVersionInfo(
           missingFiles: [],
           checkedAt: new Date().toISOString(),
           message: "Bucket de modelos sin configurar (S3_BUCKET o MODELS_S3_USE_MINIO)",
+          envComplete: false,
+          envFiles: [],
         }),
     runDetails(row.runId),
     store

@@ -138,6 +138,68 @@ def test_card_has_every_required_section_and_real_values(ctx: CardContext) -> No
     assert "{{" not in card and "}}" not in card
 
 
+def test_card_lists_package_files(ctx: CardContext) -> None:
+    """La tarjeta lista los archivos del paquete; por defecto los mínimos (1.0.0 congelada)."""
+    card = render_card(ctx)
+    assert "## Contenido del paquete" in card
+    for f in ("weights.pt", "classes.json", "preprocess.json", "summary.json"):
+        assert _code_in(card, f), f
+    # La 1.0.0 (default) NO menciona crops_source_boxes ni los archivos de entorno.
+    assert "crops_source_boxes.csv" not in card
+    assert "## Procedencia de los recortes" not in card
+
+
+def test_full_package_card_lists_env_files_and_links_crops_source_boxes(ctx: CardContext) -> None:
+    """T16/1 y /2: a partir de una versión nueva, la tarjeta lista env/config/requirements.lock
+    y enlaza crops_source_boxes.csv."""
+    ctx.version = "1.0.1"
+    ctx.package_files = list(storage.FULL_PACKAGE_FILES)
+    ctx.crops_source_boxes = "data/crops/crops_source_boxes.csv"
+    card = render_card(ctx)
+    for f in ("config.json", "env.json", "requirements.lock"):
+        assert _code_in(card, f), f
+    # Menciona y ENLACA el CSV en Markdown.
+    assert "## Procedencia de los recortes" in card
+    assert "[`data/crops/crops_source_boxes.csv`](data/crops/crops_source_boxes.csv)" in card
+    assert "ann_id" in card
+
+
+def _code_in(card: str, filename: str) -> bool:
+    return f"`{filename}`" in card
+
+
+def test_validation_only_card_for_non_winner(ctx: CardContext) -> None:
+    """T16/5.3: una versión que NO es el ganador genera tarjeta solo-validación (sin test_)."""
+    ctx.version = "0.9.0"
+    ctx.run_id = "7693ef54d0884ebba1fc40348010bf29"  # exp-01, baseline (no ganador)
+    ctx.selection = {**ctx.selection, "run_id": "fe32e1388dbd465cae714a69bf80f685"}
+    ctx.test = None  # no se evaluó test
+    card = render_card(ctx)
+    assert "## Desempeño en validación" in card
+    assert "no es el modelo campeón" in card
+    assert "best_val_loss" in card
+    # NO debe inventar métricas de test.
+    assert "## Desempeño en test" not in card
+    assert "Accuracy top-1" not in card
+    assert "Matriz de confusión" not in card
+
+
+def test_non_winner_with_test_metrics_is_rejected(ctx: CardContext) -> None:
+    """Si una versión que NO es el ganador trajera test_*, es incoherente (rompería M3)."""
+    # ctx tiene test y es el ganador por defecto → coherente. Lo volvemos no-ganador
+    # pero conservando test: debe fallar.
+    ctx.selection = {**ctx.selection, "run_id": "otro-run-distinto"}
+    with pytest.raises(CardError, match="selection.json"):
+        render_card(ctx)
+
+
+def test_winner_without_test_is_rejected(ctx: CardContext) -> None:
+    """Si el run ES el ganador pero no trae test_*, falta algo: se rechaza."""
+    ctx.test = None  # ctx.run_id == selection.run_id (ganador) por defecto
+    with pytest.raises(CardError, match="test_"):
+        render_card(ctx)
+
+
 def test_majority_baseline_and_wilson_interval() -> None:
     assert majority_baseline(make_test()) == ("person", 81 / 135)
     low, high = wilson_interval(128, 135)
@@ -244,6 +306,52 @@ def test_collect_context_reads_the_published_package_and_verifies_its_hash(
     published = json.loads((trained_package / "classes.json").read_text())
     assert ctx.classes == [published[str(i)] for i in range(len(published))]
     assert ctx.preprocess == json.loads((trained_package / "preprocess.json").read_text())
+
+
+class FakeMlflowClientNoTest(FakeMlflowClient):
+    """Run baseline (no ganador): sin métricas test_* ni matriz de confusión."""
+
+    def __init__(self, matrix_dir: Path, manifest_sha256: str = "", *args, **kwargs) -> None:
+        super().__init__(matrix_dir, *args, **kwargs)
+        self.manifest_sha256 = manifest_sha256
+
+    def get_run(self, run_id: str):
+        return SimpleNamespace(
+            info=SimpleNamespace(run_id=run_id, run_name="t07-exp-01"),
+            data=SimpleNamespace(
+                metrics={"best_val_loss": 0.08, "best_val_acc": 0.95, "best_epoch": 8.0, "stopped_epoch": 12.0},
+                params={"optimizer": "adamw"},
+                tags={"git_commit": "abc", "manifest_sha256": self.manifest_sha256},
+            ),
+        )
+
+    def download_artifacts(self, run_id: str, path: str, dst: str) -> str:
+        raise FileNotFoundError("no hay test/confusion_matrix.json en un run sin test")
+
+
+def test_collect_context_builds_validation_only_for_non_winner(
+    trained_package: Path, s3_bucket, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T16/5.3: collect_context de una versión sin test_* arma contexto solo-validación."""
+    client, settings = s3_bucket
+    storage.upload_package(client, settings.bucket, trained_package, "0.9.0")
+    sha = storage.sha256_file(trained_package / "weights.pt")
+    manifest = json.loads((trained_package / "summary.json").read_text())["data"]["manifest_sha256"]
+    row = {
+        "run_id": "7693ef54d0884ebba1fc40348010bf29",
+        "sha256": sha,
+        "dvc_release": "proyecto2 v1.1.0@dc9376e",
+        "created_at": datetime(2026, 9, 30),
+    }
+    monkeypatch.setattr(model_card.db, "connect", lambda: SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr(model_card.db, "get_model_version", lambda conn, version, name: row)
+    monkeypatch.setattr("mlflow.tracking.MlflowClient", lambda *a, **k: FakeMlflowClientNoTest(tmp_path, manifest))
+
+    ctx = collect_context("0.9.0", repo_root=_repo(tmp_path), s3_settings=settings)
+    # collect_context NO exige test_* para un no-ganador: arma contexto solo-validación.
+    assert ctx.test is None
+    assert ctx.run_id == "7693ef54d0884ebba1fc40348010bf29"
+    assert ctx.val_metrics["best_val_acc"] == 0.95
 
 
 def test_collect_context_fails_if_published_weights_were_tampered(

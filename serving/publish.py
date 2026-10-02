@@ -60,13 +60,19 @@ def resolve_winning_run(run_id: str | None, selection_path: Path = SELECTION_DEF
     )
 
 
+# Artefactos que se descargan del run de MLflow. requirements.lock NO está en el run:
+# se genera al publicar a partir de env.json. El resto del paquete completo sí lo escribe
+# el trainer (weights, classes, preprocess, summary, config, env).
+RUN_ARTIFACTS: tuple[str, ...] = tuple(f for f in storage.FULL_PACKAGE_FILES if f != storage.REQUIREMENTS_LOCK_FILE)
+
+
 def download_run_package(run_id: str, dest_dir: Path, tracking_uri: str | None = None) -> Path:
-    """Baja los artefactos del paquete del run de MLflow a ``dest_dir``."""
+    """Baja del run de MLflow los artefactos del paquete (todos menos requirements.lock)."""
     from mlflow.tracking import MlflowClient
 
     client = MlflowClient(tracking_uri)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    for filename in storage.PACKAGE_FILES:
+    for filename in RUN_ARTIFACTS:
         client.download_artifacts(run_id, filename, str(dest_dir))
     return dest_dir
 
@@ -133,6 +139,10 @@ def publish(
             sha256 = storage.sha256_file(package_dir / storage.CHECKPOINT_FILE)
             log.warning("el run no expone %s; se usa el hash calculado localmente", WEIGHTS_SHA_TAG)
 
+        # Completa el paquete con requirements.lock (desde env.json) para que incluya el
+        # entorno y las dependencias fijadas (T16/5.1), no solo pesos + metadatos.
+        storage.write_requirements_lock(package_dir)
+
         # Versión semántica: la indicada o la siguiente sobre lo ya publicado.
         chosen_version = version or storage.next_semver(storage.list_existing_versions(s3_client, s3.bucket), bump=bump)
 
@@ -145,7 +155,8 @@ def publish(
                 "usa --overwrite para reemplazarla o elige otra versión"
             )
 
-        storage.upload_package(s3_client, s3.bucket, package_dir, chosen_version)
+        # Sube el paquete COMPLETO (incluye config.json, env.json, requirements.lock).
+        storage.upload_package(s3_client, s3.bucket, package_dir, chosen_version, files=storage.FULL_PACKAGE_FILES)
 
     dvc_release = winning.dvc_release or run_tag(winning.run_id, DVC_RELEASE_TAG, tracking_uri)
     package = ModelPackage(
