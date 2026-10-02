@@ -23,6 +23,7 @@ export class ApiError extends Error {
 export const notFound = (message: string) => new ApiError(404, "not_found", message);
 export const badRequest = (message: string, details?: Record<string, string[]>) =>
   new ApiError(400, "bad_request", message, details);
+export const conflict = (message: string) => new ApiError(409, "conflict", message);
 export const upstreamError = (message: string) => new ApiError(502, "upstream_error", message);
 
 export function jsonError(error: ApiError): NextResponse<ApiErrorBody> {

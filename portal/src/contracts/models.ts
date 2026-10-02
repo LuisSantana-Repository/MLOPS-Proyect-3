@@ -83,6 +83,11 @@ export interface EvaluationResponse {
   modelName: string;
   modelVersion: string;
   runId: string | null;
+  /**
+   * De dónde salió la evaluación (P1-3): "mlflow" (el run está en el tracking server) o
+   * "repo" (respaldo verificado: `reports/t08` con el mismo run y SHA-256 de pesos).
+   */
+  source: "mlflow" | "repo";
   metrics: EvaluationMetrics;
   /** Matriz de confusión si el run la publicó como artefacto/param JSON. */
   confusionMatrix: number[][] | null;

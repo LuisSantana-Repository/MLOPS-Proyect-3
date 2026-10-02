@@ -16,7 +16,7 @@ import {
   isWinner,
   modelKey,
 } from "@/lib/ui/evaluation";
-import { experimentsRunHref, modelsHref } from "@/lib/ui/links";
+import { experimentsRunHref, modelsHref, predictionsExportHref } from "@/lib/ui/links";
 import { ClassMetricsTable } from "./ClassMetricsTable";
 import { ConfusionHeatmap } from "./ConfusionHeatmap";
 import { ErrorGallery } from "./ErrorGallery";
@@ -218,6 +218,37 @@ export function EvaluationDashboard({ initialModel }: { initialModel: string | n
   );
 }
 
+/** De dónde salió la evaluación y enlace para exportar predictions.csv (P1-3). */
+export function EvaluationSource({ data }: { data: EvaluationResponse }) {
+  const { test } = data;
+  return (
+    <p className="muted">
+      Fuente:{" "}
+      {data.source === "mlflow" ? (
+        <strong>MLflow</strong>
+      ) : (
+        <>
+          <strong>repo verificado</strong> (reports/t08: mismo run y mismo SHA-256 de pesos que la
+          versión publicada)
+        </>
+      )}
+      {test ? (
+        <>
+          {" "}
+          · {test.nSamples} predicciones de{" "}
+          {test.source === "mlflow"
+            ? "test/predictions.csv del run"
+            : "reports/t08/predictions.csv"}{" "}
+          ·{" "}
+          <a href={predictionsExportHref({ name: data.modelName, version: data.modelVersion })}>
+            Exportar predictions.csv
+          </a>
+        </>
+      ) : null}
+    </p>
+  );
+}
+
 function EvaluationView({
   data,
   winnerRunId,
@@ -235,16 +266,8 @@ function EvaluationView({
         </h2>
         <p>
           Run de MLflow: <code>{data.runId ?? "—"}</code>
-          {test ? (
-            <span className="muted">
-              {" "}
-              · {test.nSamples} predicciones de{" "}
-              {test.source === "mlflow"
-                ? "test/predictions.csv del run"
-                : "reports/t08/predictions.csv"}
-            </span>
-          ) : null}
         </p>
+        <EvaluationSource data={data} />
         <EvaluationLinks runId={data.runId} modelVersion={data.modelVersion} />
         {!winner && winnerRunId ? (
           <p className="muted">
