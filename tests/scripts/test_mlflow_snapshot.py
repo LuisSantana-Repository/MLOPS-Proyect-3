@@ -87,6 +87,30 @@ def test_every_table_has_the_same_number_of_rows(source: tuple[str, str], tmp_pa
     assert counts["metrics"] == 4
 
 
+def test_metric_values_keep_full_double_precision(tmp_path: Path) -> None:
+    """MariaDB guarda `value` como DOUBLE y SQLAlchemy lo refleja como decimal redondeado a 10
+    dígitos. Aquí se simula con una columna NUMERIC: la copia debe conservar el float exacto."""
+    import sqlite3
+
+    src = tmp_path / "origen.db"
+    client = MlflowClient(sqlite_uri(src))
+    rid = client.create_run(client.create_experiment("e")).info.run_id
+    client.log_metric(rid, "best_val_loss", 0.04632517053719817, step=10)
+    with sqlite3.connect(src) as conn:  # solo cambia cómo se refleja el tipo, no los datos
+        conn.execute("PRAGMA writable_schema=ON")
+        conn.execute(
+            "UPDATE sqlite_master SET sql = replace(sql, 'value FLOAT', 'value NUMERIC') "
+            "WHERE name IN ('metrics', 'latest_metrics')"
+        )
+    dst = tmp_path / "mlflow.db"
+
+    copy_tracking_store(sqlite_uri(src), dst)
+
+    copy = MlflowClient(sqlite_uri(dst))
+    assert copy.get_run(rid).data.metrics["best_val_loss"] == 0.04632517053719817
+    assert [m.value for m in copy.get_metric_history(rid, "best_val_loss")] == [0.04632517053719817]
+
+
 def test_copy_refuses_to_overwrite_an_existing_store(source: tuple[str, str], tmp_path: Path) -> None:
     src_uri, _ = source
     dst = tmp_path / "mlflow.db"
