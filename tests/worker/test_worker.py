@@ -98,6 +98,13 @@ def portal_params(**changes: Any) -> dict[str, Any]:
         "shuffle_seed": 1,
         "aug_seed": 2,
         "init_seed": 3,
+        "monitor": "val_acc",
+        "patience": 1,
+        "min_delta": 0.5,
+        "pretrained": False,
+        "trainable_backbone": "none",
+        "momentum": 0.8,
+        "weight_decay": 0.01,
     }
     params.update(changes)
     return params
@@ -162,9 +169,83 @@ def test_acepta_las_rutas_que_manda_el_portal(base_config, tmp_path):
     assert runner.calls[0]["cfg"].manifest_path == tmp_path / "otro" / "manifest.csv"
 
 
-def test_ignora_campos_que_el_entrenador_no_conoce(base_config, tmp_path):
-    ok, _, _ = run(base_config, tmp_path, portal_params(campo_nuevo_del_portal="x"))
-    assert ok is True
+# ---------------------------------------------------------------------------
+# P1-2: ningún parámetro aceptado por la API se ignora
+# ---------------------------------------------------------------------------
+
+# Los 17 campos de `trainingParamsSchema` (portal/src/contracts/training.ts).
+PORTAL_PARAM_NAMES = {
+    "optimizer",
+    "batch_size",
+    "max_epochs",
+    "lr",
+    "img_size",
+    "hidden_layers",
+    "dropout",
+    "shuffle_seed",
+    "aug_seed",
+    "init_seed",
+    "monitor",
+    "patience",
+    "min_delta",
+    "pretrained",
+    "trainable_backbone",
+    "momentum",
+    "weight_decay",
+}
+
+
+def test_todos_los_parametros_del_job_llegan_tal_cual_al_entrenador(base_config, tmp_path):
+    params = portal_params()
+    assert set(params) - {"release"} == PORTAL_PARAM_NAMES
+    _, _, runner = run(base_config, tmp_path, params)
+    cfg = runner.calls[0]["cfg"].to_json_dict()
+    for name in sorted(PORTAL_PARAM_NAMES):
+        assert cfg[name] == params[name], f"el worker ignoró {name}: pedido {params[name]!r}, usado {cfg[name]!r}"
+
+
+def test_el_caso_del_reporte_early_stopping_y_backbone_no_se_pierden(base_config, tmp_path):
+    """El job del hallazgo terminó con 5 / val_loss / 0.001 / layer4 en vez de lo pedido."""
+    params = portal_params(patience=1, monitor="val_acc", min_delta=0.5, trainable_backbone="none")
+    _, _, runner = run(base_config, tmp_path, params)
+    cfg = runner.calls[0]["cfg"]
+    assert (cfg.patience, cfg.monitor, cfg.min_delta, cfg.trainable_backbone) == (1, "val_acc", 0.5, "none")
+
+
+def test_los_campos_del_worker_cubren_el_contrato_y_existen_en_el_entrenador():
+    from trainer.config import TrainConfig
+
+    assert set(worker.TRAINER_FIELDS) >= PORTAL_PARAM_NAMES
+    assert set(worker.TRAINER_FIELDS) <= set(TrainConfig.model_fields)
+    schema = json.loads(Path("configs/train-config.schema.json").read_text(encoding="utf-8"))
+    assert set(schema["properties"]) >= PORTAL_PARAM_NAMES
+
+
+def test_el_log_de_config_muestra_los_parametros_de_early_stopping_y_backbone(base_config, tmp_path):
+    _, store, _ = run(base_config, tmp_path, portal_params())
+    config_line = next(m for _, m in store.logs if m.startswith("config:"))
+    for expected in ("monitor=val_acc", "patience=1", "min_delta=0.5", "trainable_backbone=none"):
+        assert expected in config_line
+    assert "pretrained=False" in config_line
+    assert "weight_decay=0.01" in config_line
+    assert "momentum=0.8" in config_line
+
+
+def test_rechaza_campos_que_el_entrenador_no_soporta(base_config, tmp_path):
+    runner = FakeRunner()
+    ok, store, _ = run(base_config, tmp_path, portal_params(campo_nuevo_del_portal="x"), runner=runner)
+    assert ok is False
+    assert runner.calls == []  # no entrena con un parámetro que ignoraría
+    assert store.last()["status"] == "failed"
+    assert "campo_nuevo_del_portal" in store.last()["error"]
+
+
+def test_no_deja_que_un_job_cambie_campos_reservados_del_worker(base_config, tmp_path):
+    runner = FakeRunner()
+    ok, store, _ = run(base_config, tmp_path, portal_params(output_dir="/tmp/otro"), runner=runner)
+    assert ok is False
+    assert runner.calls == []
+    assert "output_dir" in store.last()["error"]
 
 
 # ---------------------------------------------------------------------------
