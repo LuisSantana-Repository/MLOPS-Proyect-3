@@ -85,7 +85,11 @@ def copy_tracking_store(src_uri: str, dst: Path, *, batch_size: int = 5_000) -> 
                     raise RuntimeError(f"el origen no tiene la tabla {table.name}")
                 columns = [c.name for c in table.columns]
                 copied = 0
-                result = src.execution_options(stream_results=True).execute(sa.select(*(origin.c[c] for c in columns)))
+                # Columnas sin tipo: el valor llega tal cual del driver. Con los tipos reflejados,
+                # DOUBLE de MariaDB se convierte a Decimal redondeado a 10 dígitos y las métricas
+                # pierden precisión.
+                query = sa.select(*(sa.column(c) for c in columns)).select_from(sa.table(origin.name))
+                result = src.execution_options(stream_results=True).execute(query)
                 while rows := result.fetchmany(batch_size):
                     out.execute(table.insert(), [dict(zip(columns, row, strict=True)) for row in rows])
                     copied += len(rows)
