@@ -15,6 +15,11 @@ MLflow con `5 / val_loss / 0.001 / layer4` (los valores de `configs/baseline.yam
 | El contrato del portal es estricto: un campo no soportado responde 400 y no crea el job | `portal/src/contracts/training.ts`, `portal/src/lib/http.ts` |
 | `/training` tiene controles de métrica vigilada, patience, min_delta, backbone entrenable y weight decay | `portal/src/components/TrainingForm.tsx`, `portal/src/lib/ui/training-form.ts` |
 
+**Defaults = línea base.** Como el worker ahora respeta todo lo que llega, los valores por
+defecto del portal son los de `configs/baseline.yaml` (con la que se corrieron las 10
+corridas de T07). El único que difería era `min_delta` (0 → 0.001); un test compara cada
+default del contrato contra `baseline.yaml` para que no vuelvan a separarse.
+
 ## Evidencia
 
 - `tests/worker/test_worker.py`: todos los parámetros del job aparecen tal cual en `cfg`
@@ -27,7 +32,7 @@ MLflow con `5 / val_loss / 0.001 / layer4` (los valores de `configs/baseline.yam
 
 ```bash
 pytest tests/worker -q          # 26 passed
-cd portal && npm test           # 246 passed
+cd portal && npm test           # 248 passed
 ```
 
 No se tocaron el manifiesto, los recortes, los `.dvc`, los runs ni el modelo publicado.
