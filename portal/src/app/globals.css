@@ -118,6 +118,8 @@
 .field {
   display: grid;
   gap: 0.25rem;
+  min-width: 0;
+  align-content: start;
 }
 
 :where(.p3) label {
@@ -132,6 +134,13 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   background: #fff;
+}
+
+/* Los campos ocupan su columna: sin esto, el ancho propio del input la desborda. */
+.field input,
+.field select {
+  width: 100%;
+  min-width: 0;
 }
 
 .field small {
