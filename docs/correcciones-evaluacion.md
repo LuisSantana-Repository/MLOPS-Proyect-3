@@ -106,6 +106,20 @@ que vuelva a pasar. El MariaDB local ya no es el backend de MLflow.
 | `3af2bf1` / `dd53b3c` | `test_split_seed_method_and_test_fingerprint_come_from_the_leakage_report`, `test_without_leakage_report_the_split_tags_say_not_available` | `collect_provenance` registra `split_seed=42`, `split_method` y `test_fingerprint` desde `leakage_report.json`. Los runs históricos no se tocan. |
 | `02a18bb` / `c01ca71` | `test_startup_fails_when_the_image_was_built_from_another_commit`, `test_startup_accepts_an_image_built_from_head`, `test_startup_warns_when_the_commit_cannot_be_compared` | El worker compara el `GIT_COMMIT` horneado en la imagen con `EXPECTED_GIT_COMMIT` (de `GIT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build`): sale si difieren, avisa si no se pueden comparar. |
 
+Evidencia: worker reconstruido con `GIT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build worker`
+y un smoke dentro del contenedor contra un MLflow temporal (no toca el compartido):
+
+```text
+worker: código del worker en el commit 4e1309194a0d25f1e6246b83b58a21747fb1c228
+$ docker compose exec worker python -m trainer.tracking run --smoke --config configs/baseline.yaml
+git_commit = 4e1309194a0d25f1e6246b83b58a21747fb1c228      # = git rev-parse HEAD
+split_seed = 42
+split_method = StratifiedGroupKFold(n_splits=10, shuffle=True)
+test_fingerprint = 2da093177e6ad54ec90b91a472b3f43e15d32b143abd0bff87e908e55a7e5fe8
+manifest_sha256 = 0bdfd6d7efd40f17903df10695b3e34177d535071b76ac0c5404a215428ed578
+dvc_release = proyecto2 v1.1.0@dc9376e
+```
+
 ## P2-4 (parcial). `seed_mlflow_run.py` aislado
 
 `portal/scripts/seed_mlflow_run.py` ahora va al experimento `portal-smoke`, con `smoke=true` y
