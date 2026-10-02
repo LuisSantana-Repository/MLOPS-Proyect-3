@@ -2,12 +2,14 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { QUALITY_ARTIFACTS } from "./release-gate";
 import {
   ARTIFACTS,
   dvcMd5,
   parseSplitReport,
   readApprovedReleases,
   readCandidateSelection,
+  requireApprovedRelease,
   sourceCommit,
 } from "./repo-artifacts";
 
@@ -30,9 +32,12 @@ async function writeRelease() {
     JSON.stringify({
       release_tag: "proyecto2 v1.1.0@dc9376e",
       annotations_md5: "72e5f4025c4dbe7eb1e2420a9b4dbf9a",
-      dvc_file_content: "# proyecto2 v1.1.0 @ dc9376eeb7f6dade3cfca4c0b8d95fd8773d8e57\n",
+      dvc_file_content:
+        "# proyecto2 v1.1.0 @ dc9376eeb7f6dade3cfca4c0b8d95fd8773d8e57\n" +
+        "# data/raw.dvc\nouts:\n- md5: 1fdb1dcea3218ad2fb0edf985984a929.dir\n  path: raw\n",
     }),
   );
+  await writeGate();
   await write(ARTIFACTS.classes, JSON.stringify({ "1": "car", "0": "person" }));
   await write(ARTIFACTS.splitReport, SPLIT_CSV);
   await write(
@@ -47,6 +52,45 @@ async function writeRelease() {
     ARTIFACTS.cropsDvc,
     "outs:\n- md5: f839dd62b048da0186ade1e382bb7f66.dir\n  path: crops\n",
   );
+}
+
+/** Registro de releases y reporte de la compuerta del Proyecto 2 (P1-1). */
+async function writeGate({
+  status = "pass",
+  exitCode = 0,
+  reportVersion = "v1.1.0",
+  dataHash = "1fdb1dcea3218ad2fb0edf985984a929",
+}: {
+  status?: string;
+  exitCode?: number;
+  reportVersion?: string;
+  dataHash?: string;
+} = {}) {
+  await write(
+    QUALITY_ARTIFACTS.registry,
+    JSON.stringify({
+      versions: [
+        { version: "v1.0.0", commit: "7e36ecc", dvcRevision: "2ae957bda56b5cf9293fd620b781e699" },
+        { version: "v1.1.0", commit: "e4e33de", dvcRevision: dataHash },
+      ],
+    }),
+  );
+  await write(
+    QUALITY_ARTIFACTS.gateReport,
+    JSON.stringify({
+      dataset_version: reportVersion,
+      generated_at: "2026-09-19T03:06:11.894570Z",
+      quality: {
+        overall_status: status,
+        exit_code: exitCode,
+        checks: [
+          { name: "min_images_per_class", status, severity: "fail", threshold: 300 },
+          { name: "invalid_boxes", status: "pass", severity: "fail", threshold: 0 },
+        ],
+      },
+    }),
+  );
+  await write(QUALITY_ARTIFACTS.policy, "checks:\n  invalid_boxes:\n    threshold: 0\n");
 }
 
 beforeEach(async () => {
@@ -103,10 +147,10 @@ describe("readApprovedReleases", () => {
     await expect(readApprovedReleases(root)).rejects.toMatchObject({ status: 404 });
   });
 
-  it("404 si no hay split_report.csv", async () => {
+  it("sin split_report.csv el release no se lista (no tiene manifiesto 70/20/10)", async () => {
     await writeRelease();
     await rm(join(root, ARTIFACTS.splitReport));
-    await expect(readApprovedReleases(root)).rejects.toMatchObject({ status: 404 });
+    expect(await readApprovedReleases(root)).toEqual([]);
   });
 
   it("500 claro si un JSON está corrupto", async () => {
@@ -124,6 +168,97 @@ describe("readApprovedReleases", () => {
     const sum = Object.values(byClass).reduce((acc, c) => acc + c.total, 0);
     expect(totals.total).toBe(sum);
     expect(totals.train + totals.val + totals.test).toBe(totals.total);
+  });
+});
+
+describe("P1-1: compuerta de calidad del Proyecto 2", () => {
+  it("el release aprobado expone la evidencia de la compuerta: reporte, política y checks", async () => {
+    await writeRelease();
+    const [release] = await readApprovedReleases(root);
+    expect(release.quality).toMatchObject({
+      status: "pass",
+      exitCode: 0,
+      version: "v1.1.0",
+      registryCommit: "e4e33de",
+      dataHash: "1fdb1dcea3218ad2fb0edf985984a929",
+      generatedAt: "2026-09-19T03:06:11.894570Z",
+      registryFile: QUALITY_ARTIFACTS.registry,
+      reportFile: QUALITY_ARTIFACTS.gateReport,
+      policyFile: QUALITY_ARTIFACTS.policy,
+    });
+    expect(release.quality.reportMd5).toMatch(/^[0-9a-f]{32}$/);
+    expect(release.quality.policySha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(release.quality.checks.map((c) => c.name)).toEqual([
+      "min_images_per_class",
+      "invalid_boxes",
+    ]);
+  });
+
+  it("un release con compuerta fallida no aparece", async () => {
+    await writeRelease();
+    await writeGate({ status: "fail", exitCode: 1 });
+    expect(await readApprovedReleases(root)).toEqual([]);
+  });
+
+  it("sin reporte de la compuerta, el release no aparece", async () => {
+    await writeRelease();
+    await rm(join(root, QUALITY_ARTIFACTS.gateReport));
+    expect(await readApprovedReleases(root)).toEqual([]);
+  });
+
+  it("un reporte de otra versión no aprueba este release", async () => {
+    await writeRelease();
+    await writeGate({ reportVersion: "v1.0.0" });
+    expect(await readApprovedReleases(root)).toEqual([]);
+  });
+
+  it("si los datos no son los del registro del Proyecto 2, el release no aparece", async () => {
+    await writeRelease();
+    await writeGate({ dataHash: "0".repeat(32) });
+    expect(await readApprovedReleases(root)).toEqual([]);
+  });
+
+  it("un manifiesto con fuga no se puede usar", async () => {
+    await writeRelease();
+    await write(ARTIFACTS.leakageReport, JSON.stringify({ semilla: 42, fuga: { total: 3 } }));
+    expect(await readApprovedReleases(root)).toEqual([]);
+    await expect(requireApprovedRelease(root, "proyecto2 v1.1.0@dc9376e")).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining("fuga"),
+    });
+  });
+
+  it("requireApprovedRelease: devuelve el release aprobado", async () => {
+    await writeRelease();
+    const release = await requireApprovedRelease(root, "proyecto2 v1.1.0@dc9376e");
+    expect(release.quality.status).toBe("pass");
+  });
+
+  it("requireApprovedRelease: 400 para un release que no existe", async () => {
+    await writeRelease();
+    await expect(requireApprovedRelease(root, "v9.9.9@noaprobado")).rejects.toMatchObject({
+      status: 400,
+      details: { release: [expect.stringContaining("proyecto2 v1.1.0@dc9376e")] },
+    });
+  });
+
+  it("requireApprovedRelease: 400 con el motivo si la compuerta falló", async () => {
+    await writeRelease();
+    await writeGate({ status: "fail", exitCode: 1 });
+    await expect(requireApprovedRelease(root, "proyecto2 v1.1.0@dc9376e")).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining("no pasó"),
+    });
+  });
+
+  it("el release real del repo pasa la compuerta con el reporte del Proyecto 2", async () => {
+    const [release] = await readApprovedReleases(resolve(process.cwd(), ".."));
+    expect(release.tag).toBe("proyecto2 v1.1.0@dc9376e");
+    expect(release.quality).toMatchObject({ status: "pass", exitCode: 0, version: "v1.1.0" });
+    // MD5 de reports/release.json en el dvc.lock del Proyecto 2 (etapa `release`).
+    expect(release.quality.reportMd5).toBe("7975c619c6b2dc99ba4a052f70d522b0");
+    expect(release.quality.checks).toHaveLength(6);
+    expect(release.split.totals).toEqual({ train: 944, val: 270, test: 135, total: 1349 });
   });
 });
 

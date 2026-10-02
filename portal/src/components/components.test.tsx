@@ -20,6 +20,23 @@ const release: ApprovedRelease = {
     manifestMd5: "e75a07ce3b75455514f044b23e0d1b29",
     cropsMd5: null,
   },
+  quality: {
+    status: "pass",
+    exitCode: 0,
+    version: "v1.1.0",
+    registryCommit: "e4e33de",
+    dataHash: "1fdb1dcea3218ad2fb0edf985984a929",
+    generatedAt: "2026-09-19T03:06:11.894570Z",
+    registryFile: "annotation-backend/quality/reports/versions.json",
+    reportFile: "annotation-backend/quality/reports/release.json",
+    reportMd5: "7975c619c6b2dc99ba4a052f70d522b0",
+    policyFile: "annotation-backend/quality/quality.yaml",
+    policySha256: "a".repeat(64),
+    checks: [
+      { name: "min_images_per_class", status: "pass", severity: "fail", threshold: 300 },
+      { name: "invalid_boxes", status: "pass", severity: "fail", threshold: 0 },
+    ],
+  },
   classes: ["person", "car"],
   split: {
     seed: 42,
@@ -78,6 +95,19 @@ describe("ReleaseSelector", () => {
     expect(html).toContain("270 (20%)");
     expect(html).toContain("135 (10%)");
     expect(html).toContain("fuga 0 ✓");
+  });
+
+  it("muestra la evidencia de la compuerta de calidad del release (P1-1)", () => {
+    const html = renderToStaticMarkup(
+      <ReleaseSelector releases={[release]} selectedTag={release.tag} onChange={noop} />,
+    );
+    expect(html).toContain("Compuerta de calidad");
+    expect(html).toContain("PASS");
+    expect(html).toContain("annotation-backend/quality/reports/release.json");
+    expect(html).toContain("7975c619c6b2"); // md5 del reporte, acortado
+    expect(html).toContain("annotation-backend/quality/quality.yaml");
+    expect(html).toContain("min_images_per_class: pass");
+    expect(html).toContain("1fdb1dcea321"); // hash DVC de los datos
   });
 });
 
