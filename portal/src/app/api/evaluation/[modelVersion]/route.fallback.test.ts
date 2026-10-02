@@ -123,6 +123,53 @@ describe("P1-3: GET /api/evaluation/[modelVersion]", () => {
     expect(body.error.message).toContain("no corresponde a los pesos publicados");
   });
 
+  // --- Revisión del PR #23: el run SÍ está en MLflow pero sin predictions.csv de test. ---
+  // El respaldo debe ser el MISMO verificado (run + pesos + selección), nunca solo por run_id.
+
+  const runWithoutTest = (metrics: Record<string, number>) => ({
+    runId: RUN_ID,
+    metrics,
+    tags: {},
+    params: {},
+  });
+
+  it("run en MLflow sin artefacto de test y mismos pesos: respaldo verificado, fuente 'repo'", async () => {
+    getRun.mockResolvedValue(runWithoutTest({ test_accuracy: 128 / 135 }));
+    fetchMock.mockResolvedValue(new Response("", { status: 404 }));
+
+    const res = await GET(req(), ctx("clasificador:1.0.0"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.source).toBe("repo");
+    expect(body.test.source).toBe("repo");
+    expect(body.test.nSamples).toBe(135);
+  });
+
+  it("run en MLflow sin artefacto de test y pesos distintos: 409", async () => {
+    getRun.mockResolvedValue(runWithoutTest({ test_accuracy: 128 / 135 }));
+    fetchMock.mockResolvedValue(new Response("", { status: 404 }));
+    readPublishedRow.mockResolvedValue(published("0".repeat(64)));
+
+    expect((await GET(req(), ctx("clasificador:1.0.0"))).status).toBe(409);
+  });
+
+  it("run en MLflow sin métricas test_ y pesos distintos: 409 (no se usa el repo sin verificar)", async () => {
+    getRun.mockResolvedValue(runWithoutTest({ best_val_loss: 0.046 }));
+    readPublishedRow.mockResolvedValue(published("0".repeat(64)));
+
+    expect((await GET(req(), ctx("clasificador:1.0.0"))).status).toBe(409);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("run en MLflow sin métricas test_ y mismos pesos: respaldo verificado, fuente 'repo'", async () => {
+    getRun.mockResolvedValue(runWithoutTest({ best_val_loss: 0.046 }));
+
+    const body = await (await GET(req(), ctx("clasificador:1.0.0"))).json();
+    expect(body.source).toBe("repo");
+    expect(body.test.accuracy).toBeCloseTo(128 / 135, 12);
+    expect(body.metrics.accuracy).toBeCloseTo(128 / 135, 12);
+  });
+
   it("sin run en MLflow y con reports/t08 de otro run: 404 como antes", async () => {
     getRun.mockResolvedValue(null);
     readPublishedRow.mockResolvedValue({ ...published(), runId: "otro-run" });
@@ -133,6 +180,14 @@ describe("P1-3: GET /api/evaluation/[modelVersion]", () => {
     getRun.mockRejectedValue(upstreamError("MLflow no responde"));
     readPublishedRow.mockResolvedValue({ ...published(), runId: "otro-run" });
     expect((await GET(req(), ctx("clasificador:1.0.0"))).status).toBe(502);
+  });
+});
+
+describe("P1-3: no queda un camino sin verificar", () => {
+  it("test-evaluation ya no ofrece el respaldo que solo comparaba run_id", async () => {
+    const legacy = await import("@/lib/test-evaluation");
+    expect(Object.keys(legacy)).not.toContain("readRepoPredictions");
+    expect(Object.keys(legacy)).not.toContain("loadTestEvaluation");
   });
 });
 
