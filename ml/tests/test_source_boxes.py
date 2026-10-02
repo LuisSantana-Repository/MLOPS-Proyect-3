@@ -5,6 +5,7 @@ rectángulo realmente recortado (floor/ceil). Se genera SIN tocar crops.csv ni e
 """
 
 import csv
+import hashlib
 import json
 import math
 import random
@@ -21,6 +22,11 @@ REAL_BOXES = REPO / "data" / "crops" / "crops_source_boxes.csv"
 REAL_CROPS_CSV = REPO / "data" / "crops" / "crops.csv"
 REAL_COCO = REPO / "data" / "source" / "coco-dataset.json"
 REAL_CROPS_DIR = REPO / "data" / "crops"
+
+# SHA-256 del archivo versionado (con fin de línea LF). Si cualquier celda de cualquiera de
+# las 1349 filas cambia, esta huella cambia: lo detecta el CI aunque no tenga los datos de DVC.
+# Se actualiza solo al regenerar el archivo con make_source_boxes.py desde el COCO del release.
+REAL_BOXES_SHA256 = "855d1febd215d8b76618c12c39efa698263c68339dc482f9a5ce1ab2d8042eb4"
 
 FIELDS = [
     "ann_id",
@@ -175,6 +181,33 @@ def test_el_archivo_versionado_tiene_una_fila_por_recorte_de_crops_csv():
         assert int(box["crop_right"]) >= math.ceil(x + w) - 1
         assert int(box["crop_bottom"]) >= math.ceil(y + h) - 1
         assert w * h >= mc.DEFAULT_MIN_AREA  # las cajas menores se descartaron en T03
+
+
+def test_el_archivo_versionado_no_cambio_en_ninguna_fila():
+    """Cubre las 1349 filas completas, no una muestra: una sola celda alterada cambia la huella."""
+    content = REAL_BOXES.read_bytes().replace(b"\r\n", b"\n")
+    assert hashlib.sha256(content).hexdigest() == REAL_BOXES_SHA256
+
+
+@pytest.mark.skipif(not REAL_COCO.is_file(), reason="necesita el COCO del release (dvc pull): data/source")
+def test_las_1349_filas_coinciden_exactamente_con_el_coco():
+    """Todas las filas contra el COCO (sin abrir imágenes): caja idéntica y rectángulo floor/ceil."""
+    coco = json.loads(REAL_COCO.read_text(encoding="utf-8"))
+    annotations = {a["id"]: a for a in coco["annotations"]}
+    images = {i["id"]: i for i in coco["images"]}
+
+    boxes = _read_csv(REAL_BOXES)
+    assert len(boxes) == 1349
+    for box in boxes:
+        ann = annotations[int(box["ann_id"])]
+        img = images[ann["image_id"]]
+        assert (int(box["image_id"]), int(box["category_id"])) == (ann["image_id"], ann["category_id"])
+        assert [float(box[k]) for k in ("bbox_x", "bbox_y", "bbox_w", "bbox_h")] == [float(v) for v in ann["bbox"]], (
+            f"caja distinta a la del COCO en ann_id {box['ann_id']}"
+        )
+        expected = mc.crop_bounds(ann["bbox"], img["width"], img["height"])
+        actual = tuple(int(box[k]) for k in ("crop_left", "crop_top", "crop_right", "crop_bottom"))
+        assert actual == expected, f"rectángulo distinto en ann_id {box['ann_id']}"
 
 
 @pytest.mark.skipif(

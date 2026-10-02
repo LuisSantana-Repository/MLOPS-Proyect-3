@@ -138,6 +138,14 @@ def test_card_has_every_required_section_and_real_values(ctx: CardContext) -> No
     assert "{{" not in card and "}}" not in card
 
 
+def test_card_links_the_source_boxes_of_the_crops(ctx: CardContext) -> None:
+    """P2-1: la sección de datos enlaza el archivo con la caja de origen de cada recorte."""
+    card = render_card(ctx)
+    section = card.split("## Datos de origen")[1].split("\n## ")[0]
+    assert "`data/crops/crops_source_boxes.csv`" in section
+    assert "caja COCO de origen" in section
+
+
 def test_majority_baseline_and_wilson_interval() -> None:
     assert majority_baseline(make_test()) == ("person", 81 / 135)
     low, high = wilson_interval(128, 135)
