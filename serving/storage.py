@@ -25,17 +25,36 @@ from botocore.exceptions import ClientError
 # Nombre del modelo en el registry y en el layout de S3.
 MODEL_NAME = "clasificador"
 
-# Archivos del paquete que se versionan y suben (subconjunto de los artefactos del run).
+# Archivos mínimos que toda versión publicada tiene (incluida la 1.0.0 congelada).
 # summary.json hace las veces de "tarjeta" del modelo (model card) del contrato.
-PACKAGE_FILES: tuple[str, ...] = (
+REQUIRED_PACKAGE_FILES: tuple[str, ...] = (
     "weights.pt",
     "classes.json",
     "preprocess.json",
     "summary.json",
 )
 
+# Paquete COMPLETO (T16/5.1): además del mínimo, el entorno y las dependencias fijadas,
+# para que una versión sea reproducible bit a bit. config.json y env.json los escribe el
+# trainer en el run; requirements.lock lo genera la publicación.
+ENV_PACKAGE_FILES: tuple[str, ...] = (
+    "config.json",
+    "env.json",
+    "requirements.lock",
+)
+FULL_PACKAGE_FILES: tuple[str, ...] = REQUIRED_PACKAGE_FILES + ENV_PACKAGE_FILES
+
+# Compatibilidad: PACKAGE_FILES sigue existiendo. Es el conjunto a SUBIR por defecto
+# en publicaciones nuevas (= completo). La verificación de "published" usa el mínimo
+# (REQUIRED_PACKAGE_FILES) para no marcar como incompleta la 1.0.0, que se publicó
+# antes de T16 y no se vuelve a tocar (su VersionId/SHA están congelados).
+PACKAGE_FILES: tuple[str, ...] = FULL_PACKAGE_FILES
+
 # El archivo cuyo SHA-256 identifica al modelo (coincide con el tag weights_sha256).
 CHECKPOINT_FILE = "weights.pt"
+
+# Nombre del lockfile de dependencias dentro del paquete.
+REQUIREMENTS_LOCK_FILE = "requirements.lock"
 
 _SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 
@@ -125,6 +144,40 @@ def sha256_file(path: str | Path) -> str:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def write_requirements_lock(package_dir: str | Path) -> Path:
+    """Escribe ``requirements.lock`` en el paquete a partir de ``env.json`` del run.
+
+    env.json (lo escribe el trainer) trae la versión de Python y las versiones exactas
+    de las librerías con las que se entrenó. De ahí derivamos un lockfile con versiones
+    fijadas (p. ej. ``torch==2.14.0+cpu``), para que el paquete sea reproducible sin
+    depender de los requirements del repo. Si falta env.json, falla con un mensaje claro.
+    """
+    package_dir = Path(package_dir)
+    env_path = package_dir / "env.json"
+    if not env_path.is_file():
+        raise StorageError(f"falta env.json en {package_dir}: no se puede generar requirements.lock")
+    import json as _json
+
+    env = _json.loads(env_path.read_text(encoding="utf-8"))
+    python_version = env.get("python", "desconocida")
+    packages: dict[str, str | None] = env.get("packages", {})
+    lines = [
+        "# requirements.lock — generado por serving.storage.write_requirements_lock",
+        "# Dependencias EXACTAS del entorno que entrenó este modelo (desde env.json del run).",
+        f"# Python {python_version}",
+        "",
+    ]
+    for name in sorted(packages):
+        version = packages[name]
+        if version:
+            lines.append(f"{name}=={version}")
+        else:
+            lines.append(f"# {name}: versión no registrada en env.json")
+    lock_path = package_dir / REQUIREMENTS_LOCK_FILE
+    lock_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return lock_path
 
 
 def model_prefix(version: str, name: str = MODEL_NAME) -> str:
@@ -220,9 +273,13 @@ def upload_package(
     local_dir: str | Path,
     version: str,
     name: str = MODEL_NAME,
-    files: tuple[str, ...] = PACKAGE_FILES,
+    files: tuple[str, ...] = REQUIRED_PACKAGE_FILES,
 ) -> None:
-    """Sube los archivos del paquete desde ``local_dir`` a ``models/<name>/<version>/``."""
+    """Sube los archivos del paquete desde ``local_dir`` a ``models/<name>/<version>/``.
+
+    Por defecto sube el conjunto mínimo; la publicación completa (T16) pasa
+    ``files=FULL_PACKAGE_FILES`` para incluir entorno y dependencias.
+    """
     local_dir = Path(local_dir)
     for filename in files:
         source = local_dir / filename
@@ -237,9 +294,12 @@ def download_package(
     version: str,
     dest_dir: str | Path,
     name: str = MODEL_NAME,
-    files: tuple[str, ...] = PACKAGE_FILES,
+    files: tuple[str, ...] = REQUIRED_PACKAGE_FILES,
 ) -> Path:
-    """Descarga el paquete de una versión a ``dest_dir``. Devuelve el directorio."""
+    """Descarga el paquete de una versión a ``dest_dir``. Devuelve el directorio.
+
+    Por defecto baja el conjunto mínimo (presente en toda versión, incl. 1.0.0).
+    """
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     for filename in files:

@@ -196,6 +196,17 @@ matriz de confusión; en MLflow el run tiene métricas `test_*` (accuracy 94.81 
 
 ### 9. Publicar el modelo y su tarjeta (T10, T15)
 
+> **Prerrequisito:** las tablas del portal (`training_jobs`, `published_models`) deben existir
+> **antes** de publicar o registrar, porque `publish_model.py` y `serving.register` escriben en
+> `published_models`. Córrelas una vez (es idempotente):
+>
+> ```bash
+> cd portal && npm ci && npm run db:migrate && cd ..
+> ```
+>
+> Si publicas o registras sin esto, MariaDB responde con el error 1146 (`published_models` no
+> existe).
+
 ```bash
 python publish_model.py --run-id fe32e1388dbd465cae714a69bf80f685 --version 1.0.0
 python -m serving.model_card --version 1.0.0 --upload
@@ -236,7 +247,7 @@ escribe la fila en `published_models`. **Comprobación:** imprime
 cd portal
 cp .env.example .env        # MYSQL_* y MINIO_* iguales al .env raíz; S3_BUCKET y MODELS_AWS_* del bucket
 npm ci
-npm run db:migrate          # crea training_jobs y published_models
+npm run db:migrate          # crea training_jobs y published_models (idempotente; ya corrió en el paso 9)
 npm run dev                 # http://localhost:3000
 ```
 

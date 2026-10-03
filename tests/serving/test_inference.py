@@ -65,8 +65,8 @@ def test_recovers_from_half_downloaded_cache(s3_bucket, trained_package, tmp_pat
     cache = ModelCache(cache_dir=cache_dir, s3_settings=settings)
     loaded = cache.get("1.0.0", expected_sha256=sha256)
     assert loaded is not None
-    # Los archivos que faltaban se descargaron.
-    for name in storage.PACKAGE_FILES:
+    # Los archivos mínimos que faltaban se descargaron.
+    for name in storage.REQUIRED_PACKAGE_FILES:
         assert (partial / name).is_file(), name
 
 

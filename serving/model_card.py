@@ -70,7 +70,9 @@ class CardContext:
     params: dict[str, str]
     tags: dict[str, str]
     val_metrics: dict[str, float]
-    test: TestResults
+    # test = None en versiones que NO son el ganador (T16/5.3, M3: solo el ganador tiene
+    # métricas test_*). Esas versiones generan una tarjeta "solo validación".
+    test: TestResults | None
     classes: list[str]
     preprocess: dict[str, Any]
     summary: dict[str, Any]
@@ -80,6 +82,19 @@ class CardContext:
     exclusions: dict[str, Any]
     registry_version: str | None = None
     notes: list[str] = field(default_factory=list)
+    # Archivos realmente presentes en el paquete publicado (T16/5.1). La tarjeta los lista
+    # tal cual: la 1.0.0 congelada tiene los 4 mínimos; las versiones nuevas, el paquete
+    # completo (config.json, env.json, requirements.lock). Default = mínimos para no romper
+    # las tarjetas/fixtures previos.
+    package_files: list[str] = field(default_factory=lambda: list(storage.REQUIRED_PACKAGE_FILES))
+    # Ruta (relativa al repo) del CSV con las cajas de origen de cada recorte (T16/1.2).
+    # La tarjeta lo enlaza cuando está disponible; None en versiones que no lo incluyen.
+    crops_source_boxes: str | None = None
+
+
+# Versión publicada del run que T07 congeló como candidato (el campeón). Las tarjetas de
+# las demás versiones remiten a ella.
+CHAMPION_VERSION = "1.0.0"
 
 
 # --- Cálculos -----------------------------------------------------------------
@@ -106,24 +121,32 @@ def majority_baseline(test: TestResults) -> tuple[str, float]:
 def check_consistency(ctx: CardContext) -> None:
     """La tarjeta solo se genera si todas las fuentes describen el mismo artefacto."""
     problems = []
-    if ctx.test.labels != ctx.classes:
-        problems.append(f"clases del test {ctx.test.labels} != classes.json publicado {ctx.classes}")
     tag_classes = json.loads(ctx.tags.get("classes", "null") or "null")
     if tag_classes is not None and tag_classes != ctx.classes:
         problems.append(f"clases del run {tag_classes} != classes.json publicado {ctx.classes}")
-    total = sum(sum(row) for row in ctx.test.matrix)
-    if total != ctx.test.n_samples:
-        problems.append(f"la matriz de confusión suma {total}, no {ctx.test.n_samples}")
-    correct = sum(ctx.test.matrix[i][i] for i in range(len(ctx.test.matrix)))
-    if abs(correct / ctx.test.n_samples - ctx.test.accuracy) > 1e-9:
-        problems.append("la accuracy registrada no coincide con la diagonal de la matriz")
-    test_weights = ctx.tags.get("test_weights_sha256")
-    if test_weights and test_weights != ctx.weights_sha256:
-        problems.append("T08 evaluó otros pesos que los publicados")
-    if ctx.selection.get("run_id") != ctx.run_id:
-        problems.append(f"el run publicado {ctx.run_id} no es el congelado en selection.json")
     if ctx.summary.get("data", {}).get("manifest_sha256") != ctx.tags.get("manifest_sha256"):
         problems.append("summary.json publicado y el run no apuntan al mismo manifiesto")
+
+    if ctx.test is not None:
+        # Coherencia del test: solo aplica a la versión ganadora (la que tiene test_*).
+        if ctx.test.labels != ctx.classes:
+            problems.append(f"clases del test {ctx.test.labels} != classes.json publicado {ctx.classes}")
+        total = sum(sum(row) for row in ctx.test.matrix)
+        if total != ctx.test.n_samples:
+            problems.append(f"la matriz de confusión suma {total}, no {ctx.test.n_samples}")
+        correct = sum(ctx.test.matrix[i][i] for i in range(len(ctx.test.matrix)))
+        if abs(correct / ctx.test.n_samples - ctx.test.accuracy) > 1e-9:
+            problems.append("la accuracy registrada no coincide con la diagonal de la matriz")
+        test_weights = ctx.tags.get("test_weights_sha256")
+        if test_weights and test_weights != ctx.weights_sha256:
+            problems.append("T08 evaluó otros pesos que los publicados")
+        # El run con test_* DEBE ser el ganador congelado (M3).
+        if ctx.selection.get("run_id") != ctx.run_id:
+            problems.append(f"el run publicado {ctx.run_id} no es el congelado en selection.json")
+    elif ctx.selection.get("run_id") == ctx.run_id:
+        # Incoherencia inversa: es el ganador pero no trae test_* → algo falta.
+        problems.append("el run es el ganador de selection.json pero no tiene métricas test_*")
+
     if problems:
         raise CardError("fuentes incoherentes:\n- " + "\n- ".join(problems))
 
@@ -139,16 +162,106 @@ def _code(value: object) -> str:
     return f"`{value}`"
 
 
-def render_card(ctx: CardContext) -> str:
-    check_consistency(ctx)
-    p, t, s = ctx.params, ctx.test, ctx.summary
-    arch = s.get("model", {}).get("arch", {})
-    weights = s.get("model", {}).get("pretrained_weights", {})
-    resize = ctx.preprocess["resize"]
-    norm = ctx.preprocess["normalize"]
+# Descripción de cada archivo del paquete, para la sección "Contenido del paquete".
+_PACKAGE_FILE_DESC: dict[str, str] = {
+    "weights.pt": "checkpoint de la mejor época (state_dict + arquitectura + clases)",
+    "classes.json": "mapa índice→clase",
+    "preprocess.json": "preprocesamiento determinista de inferencia",
+    "summary.json": "resumen del run (datos, modelo, métricas de validación)",
+    "config.json": "configuración efectiva validada del entrenamiento",
+    "env.json": "versiones de Python y librerías con que se entrenó",
+    "requirements.lock": "dependencias fijadas (==) derivadas de env.json, para reproducir el entorno",
+}
+
+
+def _crops_source_boxes_lines(ctx: CardContext) -> list[str]:
+    """Sección que menciona y enlaza crops_source_boxes.csv (T16/1.2), si está disponible.
+
+    Vacía cuando el modelo no incluye el archivo (p. ej. la 1.0.0 congelada), para no
+    inventar un enlace a algo que no existe para esa versión.
+    """
+    if not ctx.crops_source_boxes:
+        return []
+    return [
+        "## Procedencia de los recortes",
+        "",
+        f"Las cajas de origen (bbox COCO) de cada recorte están en "
+        f"[`{ctx.crops_source_boxes}`]({ctx.crops_source_boxes}), enlazadas por `ann_id`: para cada "
+        "recorte, la imagen y la caja de la que salió. Permite auditar que cada entrada del manifiesto "
+        "corresponde a su objeto en la foto original.",
+        "",
+    ]
+
+
+def _performance_lines(ctx: CardContext) -> list[str]:
+    """Sección de desempeño: en test para el ganador, o solo validación para el resto (M3)."""
+    v = ctx.val_metrics
+    if ctx.test is None:
+        # Versión que NO es el ganador: solo métricas de validación (no se evaluó el test).
+        return [
+            "## Desempeño en validación",
+            "",
+            "> Esta versión **no es el modelo campeón**: no se evaluó sobre el conjunto de test "
+            "congelado, así que **no tiene métricas `test_*`** (solo el ganador de T07 las tiene, "
+            "para no romper la regla M3). Lo que sigue son métricas de **validación**.",
+            "",
+            "| Métrica (validación) | Valor |",
+            "|---|---:|",
+            f"| best_val_loss | {v['best_val_loss']:.4f} |",
+            f"| best_val_acc | {_pct(v['best_val_acc'])} |",
+            "",
+            f"Para comparar contra el campeón, mira su tarjeta ({_code(CHAMPION_VERSION)}), que sí reporta test.",
+            "",
+        ]
+    t = ctx.test
     correct = sum(t.matrix[i][i] for i in range(len(t.matrix)))
     low, high = wilson_interval(correct, t.n_samples)
     base_cls, base_acc = majority_baseline(t)
+    accuracy_row = f"**{_pct(t.accuracy)}** ({correct}/{t.n_samples}); IC 95 % {_pct(low, 1)}–{_pct(high, 1)}"
+    return [
+        "## Desempeño en test",
+        "",
+        f"Evaluación única (T08) sobre el 10 % de test congelado ({t.n_samples} recortes), "
+        f"{'el ' + t.evaluated_at if t.evaluated_at else ''}.",
+        "",
+        "| Métrica | Valor |",
+        "|---|---:|",
+        f"| Accuracy top-1 | {accuracy_row} |",
+        f"| Meta ≥ {_pct(TARGET_ACCURACY, 0)} | {'cumple' if t.accuracy >= TARGET_ACCURACY else 'NO cumple'} |",
+        f"| F1 macro | {_pct(t.f1_macro)} |",
+        f"| Baseline (siempre {_code(base_cls)}) | {_pct(base_acc)} |",
+        "",
+        "| Clase | Precisión | Recall | F1 | Soporte |",
+        "|---|---:|---:|---:|---:|",
+        *[
+            f"| {c} | {t.per_class[c]['precision']:.4f} | {t.per_class[c]['recall']:.4f} | "
+            f"{t.per_class[c]['f1']:.4f} | {int(t.per_class[c]['support'])} |"
+            for c in t.labels
+        ],
+        "",
+        "Matriz de confusión (filas = clase real, columnas = predicha):",
+        "",
+        "| Real \\ Predicha | " + " | ".join(t.labels) + " |",
+        "|---|" + "---:|" * len(t.labels),
+        *[
+            f"| {label} | " + " | ".join(str(v) for v in row) + " |"
+            for label, row in zip(t.labels, t.matrix, strict=True)
+        ],
+        "",
+    ]
+
+
+def _limitations_lines(ctx: CardContext) -> list[str]:
+    """Viñetas de limitaciones que dependen del test (solo para el ganador)."""
+    if ctx.test is None:
+        return [
+            "- Sin evaluación en test: su desempeño real está medido solo en validación, que puede "
+            "ser optimista. No usar esta versión como referencia de calidad final.",
+        ]
+    t = ctx.test
+    correct = sum(t.matrix[i][i] for i in range(len(t.matrix)))
+    low, high = wilson_interval(correct, t.n_samples)
+    _base_cls, base_acc = majority_baseline(t)
     worst = min(t.labels, key=lambda c: t.per_class[c]["recall"])
     confused = max(
         (
@@ -159,15 +272,50 @@ def render_card(ctx: CardContext) -> str:
         ),
         key=lambda x: x[2],
     )
+    return [
+        f"- La clase con menor recall es {_code(worst)} ({_pct(t.per_class[worst]['recall'])}); la confusión "
+        f"más frecuente es {_code(confused[0])} → {_code(confused[1])} ({confused[2]} casos).",
+        f"- El test tiene solo {t.n_samples} recortes: el intervalo de confianza de la accuracy es amplio "
+        f"({_pct(low, 1)}–{_pct(high, 1)}).",
+        f"- Las clases están desbalanceadas (baseline {_pct(base_acc)}); por eso se reporta F1 macro y "
+        "recall por clase.",
+    ]
+
+
+def _selection_line(ctx: CardContext) -> str:
+    """Línea de selección de T07: el ganador fue el elegido; el resto, corridas de comparación."""
+    selection = ctx.selection
+    criterion = selection.get("criterion", {})
+    rule = (
+        f"{criterion.get('mode', '—')} {_code(criterion.get('metric', '—'))} en "
+        f"{criterion.get('split', '—')} entre {len(selection.get('candidates', []))} corridas"
+    )
+    selected_at = selection.get("selected_at", "—")
+    if ctx.run_id == selection.get("run_id"):
+        return (
+            f"- **Selección (T07):** candidato elegido por {rule}, congelado el {selected_at}, antes de abrir el test."
+        )
+    return (
+        "- **Selección (T07):** corrida de comparación (no elegida). El candidato congelado por "
+        f"{rule} fue {_code(selection.get('run_id', '—'))} (versión {_code(CHAMPION_VERSION)}), "
+        f"el {selected_at}, antes de abrir el test."
+    )
+
+
+def render_card(ctx: CardContext) -> str:
+    check_consistency(ctx)
+    p, s = ctx.params, ctx.summary
+    arch = s.get("model", {}).get("arch", {})
+    weights = s.get("model", {}).get("pretrained_weights", {})
+    resize = ctx.preprocess["resize"]
+    norm = ctx.preprocess["normalize"]
     excluded = ctx.exclusions.get("clases_excluidas", [])
     discarded = sum(v.get("n", 0) for v in ctx.exclusions.get("cajas_descartadas", {}).values())
-    criterion = ctx.selection.get("criterion", {})
     bucket_key = ctx.s3_uri.removeprefix("s3://")
     bucket, prefix = bucket_key.split("/", 1)
 
     registry = _code(f"{ctx.name} v{ctx.registry_version}") if ctx.registry_version else "—"
     v = ctx.val_metrics
-    accuracy_row = f"**{_pct(t.accuracy)}** ({correct}/{t.n_samples}); IC 95 % {_pct(low, 1)}–{_pct(high, 1)}"
     lines = [
         f"# Tarjeta del modelo: {ctx.name} {ctx.version}",
         "",
@@ -200,9 +348,7 @@ def render_card(ctx: CardContext) -> str:
         f"{_code(ctx.tags.get('release_annotations_md5', '—'))}).",
         f"- **Recortes (T03):** una muestra por caja COCO válida; se descartaron {discarded} cajas "
         f"(área menor a {ctx.exclusions.get('parametros', {}).get('min_area', '—')} px²). "
-        f"Recortes versionados en DVC con md5 {_code(ctx.tags.get('crops_dvc_md5', '—'))}. "
-        "La caja COCO de origen y el rectángulo recortado de cada uno están en "
-        f"{_code('data/crops/crops_source_boxes.csv')}.",
+        f"Recortes versionados en DVC con md5 {_code(ctx.tags.get('crops_dvc_md5', '—'))}.",
         "- **Clases incluidas:** las que tienen al menos "
         f"{ctx.exclusions.get('parametros', {}).get('min_images', '—')} imágenes originales. "
         + (
@@ -239,10 +385,7 @@ def render_card(ctx: CardContext) -> str:
             if ctx.tags.get("git_dirty") == "true"
             else "."
         ),
-        f"- **Selección (T07):** candidato elegido por {criterion.get('mode', '—')} "
-        f"{_code(criterion.get('metric', '—'))} en {criterion.get('split', '—')} entre "
-        f"{len(ctx.selection.get('candidates', []))} corridas, congelado el {ctx.selection.get('selected_at', '—')}, "
-        "antes de abrir el test.",
+        _selection_line(ctx),
         "",
         "| Hiperparámetro | Valor |",
         "|---|---|",
@@ -270,35 +413,7 @@ def render_card(ctx: CardContext) -> str:
         f"paró en la {int(ctx.val_metrics['stopped_epoch'])} y se restauraron los pesos de la mejor época "
         f"(`best_val_loss` {v['best_val_loss']:.4f}, `best_val_acc` {_pct(v['best_val_acc'])}).",
         "",
-        "## Desempeño en test",
-        "",
-        f"Evaluación única (T08) sobre el 10 % de test congelado ({t.n_samples} recortes), "
-        f"{'el ' + t.evaluated_at if t.evaluated_at else ''}.",
-        "",
-        "| Métrica | Valor |",
-        "|---|---:|",
-        f"| Accuracy top-1 | {accuracy_row} |",
-        f"| Meta ≥ {_pct(TARGET_ACCURACY, 0)} | {'cumple' if t.accuracy >= TARGET_ACCURACY else 'NO cumple'} |",
-        f"| F1 macro | {_pct(t.f1_macro)} |",
-        f"| Baseline (siempre {_code(base_cls)}) | {_pct(base_acc)} |",
-        "",
-        "| Clase | Precisión | Recall | F1 | Soporte |",
-        "|---|---:|---:|---:|---:|",
-        *[
-            f"| {c} | {t.per_class[c]['precision']:.4f} | {t.per_class[c]['recall']:.4f} | "
-            f"{t.per_class[c]['f1']:.4f} | {int(t.per_class[c]['support'])} |"
-            for c in t.labels
-        ],
-        "",
-        "Matriz de confusión (filas = clase real, columnas = predicha):",
-        "",
-        "| Real \\ Predicha | " + " | ".join(t.labels) + " |",
-        "|---|" + "---:|" * len(t.labels),
-        *[
-            f"| {label} | " + " | ".join(str(v) for v in row) + " |"
-            for label, row in zip(t.labels, t.matrix, strict=True)
-        ],
-        "",
+        *_performance_lines(ctx),
         "## Preprocesamiento exacto",
         "",
         f"1. Convertir a {ctx.preprocess.get('color_mode', 'RGB')}.",
@@ -315,16 +430,18 @@ def render_card(ctx: CardContext) -> str:
         "## Limitaciones y sesgos",
         "",
         f"- Solo distingue {len(ctx.classes)} clases; cualquier otro objeto se asignará a una de ellas.",
-        f"- La clase con menor recall es {_code(worst)} ({_pct(t.per_class[worst]['recall'])}); la confusión "
-        f"más frecuente es {_code(confused[0])} → {_code(confused[1])} ({confused[2]} casos).",
-        f"- El test tiene solo {t.n_samples} recortes: el intervalo de confianza de la accuracy es amplio "
-        f"({_pct(low, 1)}–{_pct(high, 1)}).",
-        f"- Las clases están desbalanceadas (baseline {_pct(base_acc)}); por eso se reporta F1 macro y "
-        "recall por clase.",
+        *_limitations_lines(ctx),
         "- Los datos vienen de un solo release del Proyecto 2 (recortes COCO de fotos similares); el "
         "desempeño en fotos de otro dominio, recortes muy pequeños o mal encuadrados no está medido.",
         "- Entrenado y evaluado en CPU; en GPU los resultados pueden variar en los últimos decimales.",
         "",
+        "## Contenido del paquete",
+        "",
+        f"El paquete publicado en {_code(ctx.s3_uri)} contiene:",
+        "",
+        *[f"- {_code(f)} — {_PACKAGE_FILE_DESC.get(f, 'artefacto del paquete')}" for f in ctx.package_files],
+        "",
+        *_crops_source_boxes_lines(ctx),
         "## Cómo descargarlo y cargarlo",
         "",
         "```bash",
@@ -402,27 +519,45 @@ def collect_context(
         classes = [classes_raw[str(i)] for i in range(len(classes_raw))]
         preprocess = _read_json(pkg / "preprocess.json")
         summary = _read_json(pkg / "summary.json")
-        try:
-            cm_path = Path(client.download_artifacts(run.info.run_id, "test/confusion_matrix.json", tmp))
-        except Exception as exc:  # noqa: BLE001 - MLflow lanza distintos tipos según el store
-            raise CardError(f"el run {run.info.run_id} no tiene test/confusion_matrix.json: ¿ya corrió T08?") from exc
-        confusion = _read_json(cm_path)
+        # Solo el ganador tiene métricas test_* y la matriz (M3). Las versiones solo-validación
+        # (T16/5.3) no las tienen: su tarjeta es de validación, sin inventar nada.
+        m = run.data.metrics
+        has_test = "test_accuracy" in m
+        confusion = None
+        if has_test:
+            try:
+                cm_path = Path(client.download_artifacts(run.info.run_id, "test/confusion_matrix.json", tmp))
+            except Exception as exc:  # noqa: BLE001 - MLflow lanza distintos tipos según el store
+                raise CardError(
+                    f"el run {run.info.run_id} tiene test_* pero no test/confusion_matrix.json: ¿T08 incompleto?"
+                ) from exc
+            confusion = _read_json(cm_path)
 
-    m = run.data.metrics
-    if "test_accuracy" not in m:
-        raise CardError(f"el run {run.info.run_id} no tiene métricas test_*: ¿ya corrió T08?")
-    per_class = {
-        c: {k: m[f"test_{k}_{c}"] for k in ("precision", "recall", "f1", "support")} for c in confusion["labels"]
-    }
-    test = TestResults(
-        n_samples=int(m["test_n_samples"]),
-        accuracy=m["test_accuracy"],
-        f1_macro=m["test_f1_macro"],
-        per_class=per_class,
-        labels=confusion["labels"],
-        matrix=confusion["matrix"],
-        evaluated_at=run.data.tags.get("test_evaluated_at"),
-    )
+    # Archivos realmente presentes en el paquete: los mínimos siempre, más los de entorno
+    # que existan en S3 (T16/5.1). Así la tarjeta lista lo que de verdad hay por versión.
+    package_files = list(storage.REQUIRED_PACKAGE_FILES)
+    for env_file in storage.ENV_PACKAGE_FILES:
+        if _object_exists(client_s3, settings.bucket, storage.model_key(version, env_file, name)):
+            package_files.append(env_file)
+
+    # Enlace a crops_source_boxes.csv solo si existe en el repo (T16/1.2). No se inventa.
+    boxes_rel = "data/crops/crops_source_boxes.csv"
+    crops_source_boxes = boxes_rel if (repo_root / boxes_rel).is_file() else None
+
+    test: TestResults | None = None
+    if has_test:
+        per_class = {
+            c: {k: m[f"test_{k}_{c}"] for k in ("precision", "recall", "f1", "support")} for c in confusion["labels"]
+        }
+        test = TestResults(
+            n_samples=int(m["test_n_samples"]),
+            accuracy=m["test_accuracy"],
+            f1_macro=m["test_f1_macro"],
+            per_class=per_class,
+            labels=confusion["labels"],
+            matrix=confusion["matrix"],
+            evaluated_at=run.data.tags.get("test_evaluated_at"),
+        )
 
     registry_version = None
     try:
@@ -459,7 +594,20 @@ def collect_context(
         leakage=_read_json(repo_root / "data" / "splits" / "leakage_report.json"),
         exclusions=_read_json(repo_root / "data" / "crops" / "exclusions.json"),
         registry_version=registry_version,
+        package_files=package_files,
+        crops_source_boxes=crops_source_boxes,
     )
+
+
+def _object_exists(client_s3: Any, bucket: str, key: str) -> bool:
+    """True si el objeto existe en S3 (head_object); False si no."""
+    from botocore.exceptions import ClientError
+
+    try:
+        client_s3.head_object(Bucket=bucket, Key=key)
+        return True
+    except ClientError:
+        return False
 
 
 def upload_card(card_path: Path, version: str, settings: S3Settings, name: str = storage.MODEL_NAME) -> str:
