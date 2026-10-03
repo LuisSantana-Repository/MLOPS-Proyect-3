@@ -92,6 +92,11 @@ class CardContext:
     crops_source_boxes: str | None = None
 
 
+# Versión publicada del run que T07 congeló como candidato (el campeón). Las tarjetas de
+# las demás versiones remiten a ella.
+CHAMPION_VERSION = "1.0.0"
+
+
 # --- Cálculos -----------------------------------------------------------------
 
 
@@ -205,7 +210,7 @@ def _performance_lines(ctx: CardContext) -> list[str]:
             f"| best_val_loss | {v['best_val_loss']:.4f} |",
             f"| best_val_acc | {_pct(v['best_val_acc'])} |",
             "",
-            "Para comparar contra el campeón, mira su tarjeta (`1.0.0`), que sí reporta test.",
+            f"Para comparar contra el campeón, mira su tarjeta ({_code(CHAMPION_VERSION)}), que sí reporta test.",
             "",
         ]
     t = ctx.test
@@ -277,6 +282,26 @@ def _limitations_lines(ctx: CardContext) -> list[str]:
     ]
 
 
+def _selection_line(ctx: CardContext) -> str:
+    """Línea de selección de T07: el ganador fue el elegido; el resto, corridas de comparación."""
+    selection = ctx.selection
+    criterion = selection.get("criterion", {})
+    rule = (
+        f"{criterion.get('mode', '—')} {_code(criterion.get('metric', '—'))} en "
+        f"{criterion.get('split', '—')} entre {len(selection.get('candidates', []))} corridas"
+    )
+    selected_at = selection.get("selected_at", "—")
+    if ctx.run_id == selection.get("run_id"):
+        return (
+            f"- **Selección (T07):** candidato elegido por {rule}, congelado el {selected_at}, antes de abrir el test."
+        )
+    return (
+        "- **Selección (T07):** corrida de comparación (no elegida). El candidato congelado por "
+        f"{rule} fue {_code(selection.get('run_id', '—'))} (versión {_code(CHAMPION_VERSION)}), "
+        f"el {selected_at}, antes de abrir el test."
+    )
+
+
 def render_card(ctx: CardContext) -> str:
     check_consistency(ctx)
     p, s = ctx.params, ctx.summary
@@ -286,7 +311,6 @@ def render_card(ctx: CardContext) -> str:
     norm = ctx.preprocess["normalize"]
     excluded = ctx.exclusions.get("clases_excluidas", [])
     discarded = sum(v.get("n", 0) for v in ctx.exclusions.get("cajas_descartadas", {}).values())
-    criterion = ctx.selection.get("criterion", {})
     bucket_key = ctx.s3_uri.removeprefix("s3://")
     bucket, prefix = bucket_key.split("/", 1)
 
@@ -361,10 +385,7 @@ def render_card(ctx: CardContext) -> str:
             if ctx.tags.get("git_dirty") == "true"
             else "."
         ),
-        f"- **Selección (T07):** candidato elegido por {criterion.get('mode', '—')} "
-        f"{_code(criterion.get('metric', '—'))} en {criterion.get('split', '—')} entre "
-        f"{len(ctx.selection.get('candidates', []))} corridas, congelado el {ctx.selection.get('selected_at', '—')}, "
-        "antes de abrir el test.",
+        _selection_line(ctx),
         "",
         "| Hiperparámetro | Valor |",
         "|---|---|",

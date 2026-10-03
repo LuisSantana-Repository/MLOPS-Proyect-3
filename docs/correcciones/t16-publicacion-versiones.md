@@ -29,7 +29,7 @@ completo de las versiones nuevas.
   `tests/serving/test_model_card.py::test_card_lists_package_files`,
   `portal/src/lib/published-models.test.ts` (envComplete/envFiles).
 
-## 5.3 — crops_source_boxes.csv enlazado en la tarjeta
+## 1.2 — crops_source_boxes.csv enlazado en la tarjeta
 
 La tarjeta menciona y **enlaza** `data/crops/crops_source_boxes.csv` en la sección
 **Procedencia de los recortes**, pero **solo cuando el archivo existe** en el repo
@@ -53,6 +53,13 @@ El código ya soporta publicar una versión que **no es el ganador**:
   métricas `test_*`: sección *Desempeño en validación* con una nota de que **no es el
   campeón** y por eso no se evaluó en test (respeta M3). `check_consistency` rechaza dos
   incoherencias: un no-ganador con `test_*`, y el ganador sin `test_*`.
+- La línea **Selección (T07)** de la tarjeta depende del run
+  (`serving/model_card.py::_selection_line`): para el ganador dice "candidato elegido";
+  para cualquier otro run dice "corrida de comparación (no elegida)" y nombra al run que
+  sí se congeló (`selection.json`), su criterio y la versión del campeón (`1.0.0`). Así la
+  tarjeta de la `0.9.0` no afirma que exp-01 fue el elegido. La tarjeta de la `1.0.0` no
+  cambia. Tests: `test_non_winner_card_does_not_claim_it_was_the_selected_candidate` y
+  `test_winner_card_keeps_the_selected_candidate_line`.
 
 > ⚠️ **No ejecutado contra AWS.** Publicar `0.9.0` escribe en el bucket real
 > `ml-models-proyecto3-2c1a70d3` y requiere el run `exp-01` (`7693ef54…`) en un MLflow
