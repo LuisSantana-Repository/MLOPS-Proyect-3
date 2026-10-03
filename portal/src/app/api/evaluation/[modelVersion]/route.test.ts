@@ -27,7 +27,23 @@ vi.mock("@/lib/test-evaluation", async (importOriginal) => ({
   fetchMlflowArtifact: (...a: unknown[]) => fetchMlflowArtifact(...a),
 }));
 
+// 6.3: selección congelada por T07 (reports/t07/selection.json). Por defecto, la del run evaluado.
+const readCandidateSelection = vi.fn();
+vi.mock("@/lib/repo-artifacts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/repo-artifacts")>()),
+  readCandidateSelection: (...a: unknown[]) => readCandidateSelection(...a),
+}));
+
+import { notFound } from "@/lib/http";
 import { GET } from "./route";
+
+const selection = (runId: string, testSplitUsed = false) => ({
+  runId,
+  runName: null,
+  selectedAt: "2026-09-28T03:21:04+00:00",
+  criterion: { metric: "best_val_loss", mode: "min", split: "val" },
+  testSplitUsed,
+});
 
 const ctx = (seg: string) => ({ params: Promise.resolve({ modelVersion: seg }) });
 const req = (qs = "") => new Request(`http://localhost/api/evaluation/x${qs}`);
@@ -41,6 +57,7 @@ beforeEach(() => {
     params: {},
   });
   fetchMlflowArtifact.mockResolvedValue(null);
+  readCandidateSelection.mockResolvedValue(selection("run-1"));
 });
 
 describe("GET /api/evaluation/[modelVersion]", () => {
@@ -82,6 +99,7 @@ describe("GET /api/evaluation/[modelVersion]", () => {
       version: "1.0.0",
       runId: "run-pub",
     });
+    readCandidateSelection.mockResolvedValue(selection("run-pub"));
     const res = await GET(req(), ctx("clasificador:1.0.0"));
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -152,5 +170,38 @@ describe("GET /api/evaluation/[modelVersion]", () => {
     fetchMlflowArtifact.mockResolvedValue("no,es,el,csv");
     const res = await GET(req(), ctx("clasificador:3"));
     expect(res.status).toBe(500);
+  });
+
+  describe("6.3: sin selección congelada no hay resultados de test", () => {
+    it("409 si falta reports/t07/selection.json: ni accuracy ni matriz", async () => {
+      readCandidateSelection.mockRejectedValue(notFound("Todavía no hay candidato congelado"));
+      const res = await GET(req(), ctx("clasificador:3"));
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error.message).toContain("reports/t07/selection.json");
+      expect(body).not.toHaveProperty("metrics");
+      expect(body).not.toHaveProperty("test");
+      expect(fetchMlflowArtifact).not.toHaveBeenCalled();
+    });
+
+    it("409 si la selección congelada es de otro run", async () => {
+      readCandidateSelection.mockResolvedValue(selection("otro-run"));
+      const res = await GET(req(), ctx("clasificador:3"));
+      expect(res.status).toBe(409);
+      expect((await res.json()).error.message).toContain("otro-run");
+    });
+
+    it("409 si la selección dice que se usó el test para elegir", async () => {
+      readCandidateSelection.mockResolvedValue(selection("run-1", true));
+      expect((await GET(req(), ctx("clasificador:3"))).status).toBe(409);
+    });
+
+    it("un run sin métricas test_ se muestra sin pedir la selección (no revela nada del test)", async () => {
+      getRun.mockResolvedValue({ metrics: { best_val_loss: 0.05 }, tags: {}, params: {} });
+      readCandidateSelection.mockRejectedValue(notFound("sin selección"));
+      const res = await GET(req(), ctx("clasificador:3"));
+      expect(res.status).toBe(200);
+      expect((await res.json()).test).toBeNull();
+    });
   });
 });

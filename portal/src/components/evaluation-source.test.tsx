@@ -16,6 +16,13 @@ function data(source: "mlflow" | "repo"): EvaluationResponse {
     confusionMatrix: null,
     classes: null,
     test,
+    dataset: {
+      release: "proyecto2 v1.1.0@dc9376e",
+      rawDvcMd5: null,
+      annotationsMd5: null,
+      manifestDvcMd5: null,
+      manifestSha256: null,
+    },
   };
 }
 

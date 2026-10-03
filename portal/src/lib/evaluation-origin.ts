@@ -1,10 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { EvaluationMetrics, EvaluationResponse } from "@/contracts";
+import type {
+  EvaluationDataset,
+  EvaluationMetrics,
+  EvaluationResponse,
+  TestEvaluation,
+  TestPrediction,
+} from "@/contracts";
 import { env } from "@/lib/env";
-import { type ApiError, badRequest, conflict, notFound } from "@/lib/http";
+import { ApiError, badRequest, conflict, notFound } from "@/lib/http";
 import { getModelVersion, getRun, type NormalizedRun } from "@/lib/mlflow";
 import { readPublishedRow } from "@/lib/published-models";
+import { dvcMd5, readCandidateSelection, releaseLayouts } from "@/lib/repo-artifacts";
 import { computeTestEvaluation, parsePredictionsCsv } from "./evaluation-metrics";
 import { fetchMlflowArtifact, PREDICTIONS_ARTIFACT, REPO_REPORT_DIR } from "./test-evaluation";
 
@@ -21,8 +28,9 @@ import { fetchMlflowArtifact, PREDICTIONS_ARTIFACT, REPO_REPORT_DIR } from "./te
  * Las versiones enteras del Model Registry no tienen hash publicado con qué verificar,
  * así que no tienen respaldo: sin artefacto en MLflow, su evaluación de test es `null`.
  *
- * En ambos casos se mantiene la regla de T07/T08: no hay resultados de test sin
- * `reports/t07/selection.json` del mismo run con `test_split_used=false`.
+ * En todos los casos se mantiene la regla de T07/T08 (6.3): no hay resultados de test
+ * sin `reports/t07/selection.json` del mismo run con `test_split_used=false`. Sin esa
+ * selección congelada la API responde 409 y no entrega accuracy, matriz ni predicciones.
  */
 
 const SELECTION = "reports/t07/selection.json";
@@ -77,6 +85,97 @@ export async function resolveOrigin(name: string, version: string): Promise<Mode
   return { runId: mv.runId, weightsSha256: null };
 }
 
+/**
+ * 6.3: los resultados de test solo se muestran si T07 congeló la selección ANTES del test,
+ * para ESTE run y sin usar el test. Si no, 409 (no se revela accuracy, matriz ni predicciones).
+ */
+export async function requireFrozenSelection(root: string, runId: string | null): Promise<void> {
+  let selection: Awaited<ReturnType<typeof readCandidateSelection>>;
+  try {
+    selection = await readCandidateSelection(root);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      throw conflict(
+        `No se muestran resultados de test sin ${SELECTION}: falta el candidato congelado por validación (T07)`,
+      );
+    }
+    throw err;
+  }
+  if (!runId || selection.runId !== runId) {
+    throw conflict(
+      `No se muestran resultados de test: ${SELECTION} congeló el run ${selection.runId}, no ${runId ?? "—"}`,
+    );
+  }
+  if (selection.testSplitUsed !== false) {
+    throw conflict(
+      `No se muestran resultados de test: ${SELECTION} indica que el test se usó para elegir`,
+    );
+  }
+}
+
+function hasTestResults(metrics: Record<string, number>): boolean {
+  return Object.keys(metrics).some((k) => k.startsWith("test_"));
+}
+
+/** md5 del `data/raw.dvc` del Proyecto 2, dentro del contenido del .dvc que guardó T03. */
+export function rawDvcMd5(dvcFileContent: string | undefined): string | null {
+  const block = dvcFileContent?.split(/^# /m).find((b) => b.startsWith("data/raw.dvc"));
+  return block?.match(/md5:\s*([0-9a-f]{32}(?:\.dir)?)/)?.[1] ?? null;
+}
+
+interface ReleaseInfoFile {
+  release_tag?: string;
+  annotations_md5?: string;
+  dvc_file_content?: string;
+}
+
+interface ReleaseFiles {
+  info: ReleaseInfoFile;
+  manifestDvcMd5: string | null;
+}
+
+/**
+ * Archivos versionados del release `tag` (`null` = el entregado). Se busca en el release
+ * entregado y en `data/releases/*`; si ninguno tiene esa etiqueta, no hay archivos.
+ */
+async function readReleaseFiles(root: string, tag: string | null): Promise<ReleaseFiles | null> {
+  for (const layout of await releaseLayouts(root)) {
+    const info = parseJson<ReleaseInfoFile>(
+      await readOptional(join(root, layout.crops, "release_info.json")),
+    );
+    if (!info || (tag !== null && info.release_tag !== tag)) continue;
+    return {
+      info,
+      manifestDvcMd5: dvcMd5(await readOptional(join(root, layout.splits, "manifest.csv.dvc"))),
+    };
+  }
+  return null;
+}
+
+/**
+ * Release y hashes DVC de los datos (6.3). Las etiquetas del run tienen prioridad; lo que
+ * falte se completa con los archivos del MISMO release (`dvc_release`), nunca con los de
+ * otro: un release que no está en el repo deja esos hashes en `null`.
+ */
+export async function readDatasetVersion(
+  root: string,
+  runTags: Record<string, string> | null,
+): Promise<EvaluationDataset> {
+  const files = await readReleaseFiles(root, runTags?.dvc_release ?? null);
+  return {
+    release: runTags?.dvc_release ?? files?.info.release_tag ?? null,
+    rawDvcMd5: rawDvcMd5(files?.info.dvc_file_content),
+    annotationsMd5: runTags?.release_annotations_md5 ?? files?.info.annotations_md5 ?? null,
+    manifestDvcMd5: runTags?.manifest_dvc_md5 ?? files?.manifestDvcMd5 ?? null,
+    manifestSha256: runTags?.manifest_sha256 ?? null,
+  };
+}
+
+/** La evaluación con TODAS las predicciones del test para la galería (4.4). */
+function withPredictions(test: TestEvaluation, rows: TestPrediction[]): TestEvaluation {
+  return { ...test, predictions: rows };
+}
+
 export interface VerifiedRepoReport {
   runId: string;
   weightsSha256: string;
@@ -94,11 +193,6 @@ interface RepoMetricsFile {
 }
 
 type ClassReportFile = Record<string, Record<string, number>>;
-
-interface SelectionFile {
-  run_id?: string;
-  test_split_used?: boolean;
-}
 
 /**
  * `reports/t08` como respaldo, verificado contra la versión publicada.
@@ -123,12 +217,7 @@ export async function readVerifiedRepoReport(
     );
   }
 
-  const selection = parseJson<SelectionFile>(await readOptional(join(root, SELECTION)));
-  if (selection?.run_id !== origin.runId || selection.test_split_used !== false) {
-    throw conflict(
-      `No se muestran resultados de test sin ${SELECTION} de este run con test_split_used=false`,
-    );
-  }
+  await requireFrozenSelection(root, origin.runId);
 
   const predictionsCsv = await readOptional(join(root, REPO_REPORT_DIR, "predictions.csv"));
   if (predictionsCsv === null) return null;
@@ -214,6 +303,10 @@ export async function loadEvaluation(
   if (run) {
     const runId = origin.runId ?? run.runId;
     const { confusionMatrix, classes } = confusionAndClasses(run);
+    const dataset = await readDatasetVersion(root, run.tags);
+
+    // 6.3: antes de exponer cualquier métrica test_, la selección congelada de este run.
+    if (hasTestResults(run.metrics)) await requireFrozenSelection(root, runId);
 
     // predictions.csv del run. Solo se pide si T08 ya registró métricas de test.
     let csv: string | null = null;
@@ -228,7 +321,10 @@ export async function loadEvaluation(
 
     if (csv !== null) {
       const parsed = parsePredictionsCsv(csv);
-      const test = computeTestEvaluation(parsed.classes, parsed.rows, run.metrics, "mlflow");
+      const test = withPredictions(
+        computeTestEvaluation(parsed.classes, parsed.rows, run.metrics, "mlflow"),
+        parsed.rows,
+      );
       return {
         modelName: name,
         modelVersion: version,
@@ -238,6 +334,7 @@ export async function loadEvaluation(
         confusionMatrix: confusionMatrix ?? test.confusionMatrix.matrix,
         classes: classes ?? test.confusionMatrix.labels,
         test,
+        dataset,
       };
     }
 
@@ -247,7 +344,10 @@ export async function loadEvaluation(
     if (report) {
       const logged = { ...report.logged, ...run.metrics };
       const parsed = parsePredictionsCsv(report.predictionsCsv);
-      const test = computeTestEvaluation(parsed.classes, parsed.rows, logged, "repo");
+      const test = withPredictions(
+        computeTestEvaluation(parsed.classes, parsed.rows, logged, "repo"),
+        parsed.rows,
+      );
       return {
         modelName: name,
         modelVersion: version,
@@ -257,6 +357,7 @@ export async function loadEvaluation(
         confusionMatrix: confusionMatrix ?? test.confusionMatrix.matrix,
         classes: classes ?? test.confusionMatrix.labels,
         test,
+        dataset,
       };
     }
     if (artifactError) throw artifactError;
@@ -270,6 +371,7 @@ export async function loadEvaluation(
       confusionMatrix,
       classes,
       test: null,
+      dataset,
     };
   }
 
@@ -278,7 +380,7 @@ export async function loadEvaluation(
 
   const { logged } = report;
   const { classes, rows } = parsePredictionsCsv(report.predictionsCsv);
-  const test = computeTestEvaluation(classes, rows, logged, "repo");
+  const test = withPredictions(computeTestEvaluation(classes, rows, logged, "repo"), rows);
   return {
     modelName: name,
     modelVersion: version,
@@ -288,6 +390,7 @@ export async function loadEvaluation(
     confusionMatrix: test.confusionMatrix.matrix,
     classes: test.confusionMatrix.labels,
     test,
+    dataset: await readDatasetVersion(root, null),
   };
 }
 
@@ -299,6 +402,9 @@ export async function loadPredictionsCsv(
 ): Promise<{ csv: string; source: "mlflow" | "repo"; runId: string }> {
   const origin = await resolveOrigin(name, version);
   if (!origin.runId) throw noOrigin(name, version);
+
+  // Exportar predicciones también es revelar el test: misma regla de la selección (6.3).
+  await requireFrozenSelection(root, origin.runId);
 
   let mlflowError: ApiError | null = null;
   try {

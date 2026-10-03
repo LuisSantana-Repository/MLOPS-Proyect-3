@@ -50,5 +50,7 @@ export interface TestEvaluation {
   confusionMatrix: { labels: string[]; matrix: number[][] };
   /** Predicciones incorrectas, de la más segura a la menos segura. */
   errors: TestPrediction[];
+  /** Todas las predicciones del test (aciertos y errores), en el orden de predictions.csv (4.4). */
+  predictions?: TestPrediction[];
   checks: MetricCheck[];
 }

@@ -26,7 +26,15 @@ vi.mock("@/lib/published-models", () => ({
   readPublishedRow: (...a: unknown[]) => readPublishedRow(...a),
 }));
 
-import { upstreamError } from "@/lib/http";
+// 6.3: por defecto, la selección REAL del repo; algunas pruebas la quitan.
+const readCandidateSelection = vi.fn();
+vi.mock("@/lib/repo-artifacts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/repo-artifacts")>()),
+  readCandidateSelection: (...a: unknown[]) => readCandidateSelection(...a),
+}));
+
+import { notFound, upstreamError } from "@/lib/http";
+import type * as artifacts from "@/lib/repo-artifacts";
 import { GET as EXPORT } from "./predictions/route";
 import { GET } from "./route";
 
@@ -46,8 +54,10 @@ const published = (sha256 = WEIGHTS) => ({
 
 const fetchMock = vi.fn<typeof fetch>();
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  const real = await vi.importActual<typeof artifacts>("@/lib/repo-artifacts");
+  readCandidateSelection.mockImplementation((root: string) => real.readCandidateSelection(root));
   readPublishedRow.mockResolvedValue(published());
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -216,5 +226,65 @@ describe("P1-3: GET /api/evaluation/[modelVersion]/predictions (exportar)", () =
     fetchMock.mockResolvedValue(new Response("", { status: 404 }));
     readPublishedRow.mockResolvedValue(published("0".repeat(64)));
     expect((await EXPORT(req(), ctx("clasificador:1.0.0"))).status).toBe(409);
+  });
+});
+
+describe("Actividad B: selección congelada, versión del dataset y galería (6.3, 4.4)", () => {
+  const withRun = () =>
+    getRun.mockResolvedValue({
+      runId: RUN_ID,
+      metrics: { test_accuracy: 128 / 135, test_f1_macro: 0.9458173269881314 },
+      tags: {
+        dvc_release: "proyecto2 v1.1.0@dc9376e",
+        manifest_dvc_md5: "e75a07ce3b75455514f044b23e0d1b29",
+        manifest_sha256: "0bdfd6d7efd40f17903df10695b3e34177d535071b76ac0c5404a215428ed578",
+      },
+      params: {},
+    });
+
+  it("sin selection.json: 409 en MLflow, en el respaldo y en la exportación (sin 94.8 %)", async () => {
+    readCandidateSelection.mockRejectedValue(notFound("Todavía no hay candidato congelado"));
+    fetchMock.mockResolvedValue(new Response(PREDICTIONS, { status: 200 }));
+
+    withRun();
+    const viaMlflow = await GET(req(), ctx("clasificador:1.0.0"));
+    expect(viaMlflow.status).toBe(409);
+    expect(JSON.stringify(await viaMlflow.json())).not.toContain("0.948");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    getRun.mockResolvedValue(null);
+    expect((await GET(req(), ctx("clasificador:1.0.0"))).status).toBe(409);
+    expect((await EXPORT(req(), ctx("clasificador:1.0.0"))).status).toBe(409);
+  });
+
+  it("muestra el release y los hashes del dataset (también desde el respaldo)", async () => {
+    withRun();
+    fetchMock.mockResolvedValue(new Response(PREDICTIONS, { status: 200 }));
+    const fromMlflow = (await (await GET(req(), ctx("clasificador:1.0.0"))).json()).dataset;
+    getRun.mockResolvedValue(null);
+    const fromRepo = (await (await GET(req(), ctx("clasificador:1.0.0"))).json()).dataset;
+
+    for (const dataset of [fromMlflow, fromRepo]) {
+      expect(dataset).toMatchObject({
+        release: "proyecto2 v1.1.0@dc9376e",
+        rawDvcMd5: "1fdb1dcea3218ad2fb0edf985984a929.dir",
+        annotationsMd5: "72e5f4025c4dbe7eb1e2420a9b4dbf9a",
+        manifestDvcMd5: "e75a07ce3b75455514f044b23e0d1b29",
+      });
+    }
+    expect(fromMlflow.manifestSha256).toBe(
+      "0bdfd6d7efd40f17903df10695b3e34177d535071b76ac0c5404a215428ed578",
+    );
+  });
+
+  it("trae las 135 predicciones del test: 128 aciertos y 7 errores, todas con recorte", async () => {
+    getRun.mockResolvedValue(null);
+    const { test } = await (await GET(req(), ctx("clasificador:1.0.0"))).json();
+    const predictions: { cropPath: string; yTrue: string; yPred: string }[] = test.predictions;
+    expect(predictions).toHaveLength(135);
+    expect(predictions.filter((p) => p.yTrue === p.yPred)).toHaveLength(128);
+    expect(predictions.filter((p) => p.yTrue !== p.yPred)).toHaveLength(7);
+    expect(new Set(predictions.map((p) => p.cropPath)).size).toBe(135);
+    for (const p of predictions) expect(p.cropPath).toMatch(/^crops\/\d+_\d+\.jpg$/);
   });
 });

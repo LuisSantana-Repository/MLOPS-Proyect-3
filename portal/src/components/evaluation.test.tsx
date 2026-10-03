@@ -1,12 +1,25 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { TestEvaluation } from "@/contracts";
+import type { TestEvaluation, TestPrediction } from "@/contracts";
 import type { DefaultModelChoice } from "@/lib/ui/evaluation";
 import { ClassMetricsTable } from "./ClassMetricsTable";
 import { ConfusionHeatmap } from "./ConfusionHeatmap";
-import { ErrorGallery } from "./ErrorGallery";
-import { DefaultModelNotice, EvaluationDashboard, WinnerBadge } from "./EvaluationDashboard";
+import {
+  BaselineComparison,
+  DatasetVersion,
+  DefaultModelNotice,
+  EvaluationDashboard,
+  majorityBaseline,
+  WinnerBadge,
+} from "./EvaluationDashboard";
 import { MetricCards } from "./MetricCards";
+import {
+  countOutcomes,
+  filterPredictions,
+  PAGE_SIZE,
+  PredictionGallery,
+  paginate,
+} from "./PredictionGallery";
 
 const test: TestEvaluation = {
   source: "mlflow",
@@ -78,20 +91,92 @@ describe("ConfusionHeatmap", () => {
   });
 });
 
-describe("ErrorGallery", () => {
-  it("muestra el recorte, la clase real, la predicha y su probabilidad", () => {
-    const html = renderToStaticMarkup(<ErrorGallery errors={test.errors} classes={test.classes} />);
-    expect(html).toContain('src="/api/crops/crops/12_345.jpg"');
-    expect(html).toContain('alt="Recorte 345: real car, predicho person"');
-    expect(html).toContain("91.0%");
-    expect(html).toContain('id="filter-true"');
-    expect(html).toContain('id="filter-pred"');
-    expect(html).toContain("1 de 1 errores");
+/** 135 casos como el test real: 128 aciertos y 7 errores (car→person). */
+function testSet(): TestPrediction[] {
+  return Array.from({ length: 135 }, (_, i) => {
+    const yTrue = i < 81 ? "person" : "car";
+    const yPred = i >= 128 ? "person" : yTrue;
+    return {
+      cropPath: `crops/${i}_${1000 + i}.jpg`,
+      annId: String(1000 + i),
+      imageId: String(i),
+      yTrue,
+      yPred,
+      confidence: 0.9,
+      probabilities: { person: yPred === "person" ? 0.9 : 0.1, car: yPred === "car" ? 0.9 : 0.1 },
+    };
+  });
+}
+
+describe("PredictionGallery (4.4)", () => {
+  it("cuenta 128 aciertos y 7 errores y filtra por resultado y clases", () => {
+    const all = testSet();
+    expect(countOutcomes(all)).toEqual({ correct: 128, error: 7 });
+    expect(filterPredictions(all, { outcome: "correct", yTrue: "", yPred: "" })).toHaveLength(128);
+    expect(filterPredictions(all, { outcome: "error", yTrue: "", yPred: "" })).toHaveLength(7);
+    expect(filterPredictions(all, { outcome: "all", yTrue: "car", yPred: "person" })).toHaveLength(
+      7,
+    );
+    expect(filterPredictions(all, { outcome: "correct", yTrue: "car", yPred: "" })).toHaveLength(
+      47,
+    );
+    expect(filterPredictions(all, { outcome: "error", yTrue: "person", yPred: "" })).toHaveLength(
+      0,
+    );
   });
 
-  it("sin errores lo dice", () => {
-    const html = renderToStaticMarkup(<ErrorGallery errors={[]} classes={test.classes} />);
-    expect(html).toContain("No hay predicciones incorrectas");
+  it("pagina los 135 casos sin perder ninguno", () => {
+    const all = testSet();
+    const pages = paginate(all, 0).pages;
+    expect(pages).toBe(Math.ceil(135 / PAGE_SIZE));
+    const seen = Array.from({ length: pages }, (_, i) => paginate(all, i).items).flat();
+    expect(seen).toEqual(all);
+    expect(paginate(all, 99).page).toBe(pages - 1); // se ajusta al rango
+    expect(paginate([], 0)).toEqual({ items: [], page: 0, pages: 1 });
+  });
+
+  it("cada tarjeta muestra recorte, real, predicha, probabilidad y si es acierto o error", () => {
+    const html = renderToStaticMarkup(
+      <PredictionGallery predictions={testSet()} classes={["person", "car"]} />,
+    );
+    expect(html).toContain("135 casos de test: 128 aciertos y 7 errores.");
+    expect(html).toContain('src="/api/crops/crops/0_1000.jpg"');
+    expect(html).toContain('alt="Recorte 1000: real person, predicho person"');
+    expect(html).toContain("Acierto");
+    expect(html).toContain("90.0%");
+    for (const id of ["filter-outcome", "filter-true", "filter-pred"]) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(html).toContain(`Página 1 de ${Math.ceil(135 / PAGE_SIZE)}`);
+    expect(html.match(/class="gallery-item"/g)).toHaveLength(PAGE_SIZE);
+  });
+});
+
+describe("Versión del dataset y baseline (6.3, 4.4)", () => {
+  it("muestra el release y los hashes DVC de los datos", () => {
+    const html = renderToStaticMarkup(
+      <DatasetVersion
+        dataset={{
+          release: "proyecto2 v1.1.0@dc9376e",
+          rawDvcMd5: "1fdb1dcea3218ad2fb0edf985984a929.dir",
+          annotationsMd5: "72e5f4025c4dbe7eb1e2420a9b4dbf9a",
+          manifestDvcMd5: "e75a07ce3b75455514f044b23e0d1b29",
+          manifestSha256: null,
+        }}
+      />,
+    );
+    expect(html).toContain("proyecto2 v1.1.0@dc9376e");
+    expect(html).toContain("1fdb1dcea3218ad2fb0edf985984a929.dir");
+    expect(html).toContain("e75a07ce3b75455514f044b23e0d1b29");
+    expect(html).toContain(">—</code>"); // sin dato, no se inventa
+  });
+
+  it("baseline de clase mayoritaria: siempre person = 60 % y la mejora del modelo", () => {
+    expect(majorityBaseline(test)).toEqual({ className: "person", accuracy: 81 / 135 });
+    const html = renderToStaticMarkup(<BaselineComparison test={test} />);
+    expect(html).toContain("<code>person</code>");
+    expect(html).toContain("60.0%");
+    expect(html).toContain("32.6 pp por encima");
   });
 });
 
