@@ -58,12 +58,36 @@ export function paginate<T>(
   return { items: items.slice(current * size, (current + 1) * size), page: current, pages };
 }
 
+/** El recorte del caso; si no carga (p. ej. falta `dvc pull`) deja un aviso, no una imagen rota. */
+function CropImage({ prediction }: { prediction: TestPrediction }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <p className="muted" role="note">
+        Imagen no disponible (¿falta <code>dvc pull</code> de los recortes?)
+      </p>
+    );
+  }
+  return (
+    // biome-ignore lint/performance/noImgElement: recortes pequeños servidos por /api/crops; no necesitan next/image
+    <img
+      src={cropUrl(prediction.cropPath)}
+      alt={`Recorte ${prediction.annId}: real ${prediction.yTrue}, predicho ${prediction.yPred}`}
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function PredictionGallery({
   predictions,
   classes,
+  errorsOnly = false,
 }: {
   predictions: TestPrediction[];
   classes: string[];
+  /** La API solo entregó los errores: se avisa y no se ofrecen los aciertos. */
+  errorsOnly?: boolean;
 }) {
   const [filter, setFilter] = useState<PredictionFilter>({ outcome: "all", yTrue: "", yPred: "" });
   const [page, setPage] = useState(0);
@@ -92,24 +116,33 @@ export function PredictionGallery({
 
   return (
     <div className="stack">
-      <p className="muted">
-        {predictions.length} casos de test: {counts.correct} aciertos y {counts.error} errores.
-      </p>
+      {errorsOnly ? (
+        <p className="muted" role="status">
+          Solo se recibieron los {predictions.length} errores; los aciertos no están disponibles
+          para esta evaluación.
+        </p>
+      ) : (
+        <p className="muted">
+          {predictions.length} casos de test: {counts.correct} aciertos y {counts.error} errores.
+        </p>
+      )}
       <div className="row filters">
-        <div className="field">
-          <label htmlFor="filter-outcome">Resultado</label>
-          <select
-            id="filter-outcome"
-            value={filter.outcome}
-            onChange={(e) => update({ outcome: e.target.value as Outcome })}
-          >
-            {OUTCOMES.map((o) => (
-              <option key={o} value={o}>
-                {OUTCOME_LABELS[o]}
-              </option>
-            ))}
-          </select>
-        </div>
+        {errorsOnly ? null : (
+          <div className="field">
+            <label htmlFor="filter-outcome">Resultado</label>
+            <select
+              id="filter-outcome"
+              value={filter.outcome}
+              onChange={(e) => update({ outcome: e.target.value as Outcome })}
+            >
+              {OUTCOMES.map((o) => (
+                <option key={o} value={o}>
+                  {OUTCOME_LABELS[o]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {classSelect("filter-true", "Clase real", filter.yTrue, "yTrue")}
         {classSelect("filter-pred", "Clase predicha", filter.yPred, "yPred")}
         <p className="muted" aria-live="polite">
@@ -124,12 +157,7 @@ export function PredictionGallery({
           <ul className="gallery">
             {view.items.map((p) => (
               <li key={p.annId} className="gallery-item">
-                {/* biome-ignore lint/performance/noImgElement: recortes pequeños servidos por /api/crops; no necesitan next/image */}
-                <img
-                  src={cropUrl(p.cropPath)}
-                  alt={`Recorte ${p.annId}: real ${p.yTrue}, predicho ${p.yPred}`}
-                  loading="lazy"
-                />
+                <CropImage prediction={p} />
                 <span className={`badge ${isCorrect(p) ? "status-succeeded" : "status-failed"}`}>
                   {isCorrect(p) ? "Acierto" : "Error"}
                 </span>

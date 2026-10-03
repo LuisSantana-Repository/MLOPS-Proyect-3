@@ -11,7 +11,7 @@ import { env } from "@/lib/env";
 import { ApiError, badRequest, conflict, notFound } from "@/lib/http";
 import { getModelVersion, getRun, type NormalizedRun } from "@/lib/mlflow";
 import { readPublishedRow } from "@/lib/published-models";
-import { dvcMd5, readCandidateSelection } from "@/lib/repo-artifacts";
+import { dvcMd5, readCandidateSelection, releaseLayouts } from "@/lib/repo-artifacts";
 import { computeTestEvaluation, parsePredictionsCsv } from "./evaluation-metrics";
 import { fetchMlflowArtifact, PREDICTIONS_ARTIFACT, REPO_REPORT_DIR } from "./test-evaluation";
 
@@ -34,8 +34,6 @@ import { fetchMlflowArtifact, PREDICTIONS_ARTIFACT, REPO_REPORT_DIR } from "./te
  */
 
 const SELECTION = "reports/t07/selection.json";
-const RELEASE_INFO = "data/crops/release_info.json";
-const MANIFEST_DVC = "data/splits/manifest.csv.dvc";
 const SEMVER = /^\d+\.\d+\.\d+$/;
 
 async function readOptional(path: string): Promise<string | null> {
@@ -131,18 +129,44 @@ interface ReleaseInfoFile {
   dvc_file_content?: string;
 }
 
-/** Release y hashes DVC de los datos (6.3). Las etiquetas del run tienen prioridad. */
+interface ReleaseFiles {
+  info: ReleaseInfoFile;
+  manifestDvcMd5: string | null;
+}
+
+/**
+ * Archivos versionados del release `tag` (`null` = el entregado). Se busca en el release
+ * entregado y en `data/releases/*`; si ninguno tiene esa etiqueta, no hay archivos.
+ */
+async function readReleaseFiles(root: string, tag: string | null): Promise<ReleaseFiles | null> {
+  for (const layout of await releaseLayouts(root)) {
+    const info = parseJson<ReleaseInfoFile>(
+      await readOptional(join(root, layout.crops, "release_info.json")),
+    );
+    if (!info || (tag !== null && info.release_tag !== tag)) continue;
+    return {
+      info,
+      manifestDvcMd5: dvcMd5(await readOptional(join(root, layout.splits, "manifest.csv.dvc"))),
+    };
+  }
+  return null;
+}
+
+/**
+ * Release y hashes DVC de los datos (6.3). Las etiquetas del run tienen prioridad; lo que
+ * falte se completa con los archivos del MISMO release (`dvc_release`), nunca con los de
+ * otro: un release que no está en el repo deja esos hashes en `null`.
+ */
 export async function readDatasetVersion(
   root: string,
   runTags: Record<string, string> | null,
 ): Promise<EvaluationDataset> {
-  const info = parseJson<ReleaseInfoFile>(await readOptional(join(root, RELEASE_INFO)));
+  const files = await readReleaseFiles(root, runTags?.dvc_release ?? null);
   return {
-    release: runTags?.dvc_release ?? info?.release_tag ?? null,
-    rawDvcMd5: rawDvcMd5(info?.dvc_file_content),
-    annotationsMd5: runTags?.release_annotations_md5 ?? info?.annotations_md5 ?? null,
-    manifestDvcMd5:
-      runTags?.manifest_dvc_md5 ?? dvcMd5(await readOptional(join(root, MANIFEST_DVC))),
+    release: runTags?.dvc_release ?? files?.info.release_tag ?? null,
+    rawDvcMd5: rawDvcMd5(files?.info.dvc_file_content),
+    annotationsMd5: runTags?.release_annotations_md5 ?? files?.info.annotations_md5 ?? null,
+    manifestDvcMd5: runTags?.manifest_dvc_md5 ?? files?.manifestDvcMd5 ?? null,
     manifestSha256: runTags?.manifest_sha256 ?? null,
   };
 }

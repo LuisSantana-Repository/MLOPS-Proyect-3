@@ -348,6 +348,7 @@ function EvaluationView({
             <PredictionGallery
               predictions={test.predictions ?? test.errors}
               classes={test.classes}
+              errorsOnly={test.predictions === undefined}
             />
           </section>
         </>
