@@ -61,27 +61,46 @@ El código ya soporta publicar una versión que **no es el ganador**:
   cambia. Tests: `test_non_winner_card_does_not_claim_it_was_the_selected_candidate` y
   `test_winner_card_keeps_the_selected_candidate_line`.
 
-> ⚠️ **No ejecutado contra AWS.** Publicar `0.9.0` escribe en el bucket real
-> `ml-models-proyecto3-2c1a70d3` y requiere el run `exp-01` (`7693ef54…`) en un MLflow
-> accesible (hoy no está en el MLflow local; se perdió al recrear volúmenes). El flujo
-> está probado contra MinIO/moto. Para publicarlo de verdad, con el run disponible y el
-> OK del equipo:
->
-> ```bash
-> # 1. (una vez) tablas del portal
-> cd portal && npm ci && npm run db:migrate && cd ..
-> # 2. publicar el baseline exp-01 como 0.9.0 (pesos DISTINTOS a 1.0.0)
-> python publish_model.py --run-id 7693ef54d0884ebba1fc40348010bf29 --version 0.9.0
-> # 3. tarjeta solo-validación de la 0.9.0 (no toca la 1.0.0)
-> python -m serving.model_card --version 0.9.0 --upload
-> # 4. comprobar que hay DOS versiones con pesos de distinto SHA-256
-> aws s3 ls s3://ml-models-proyecto3-2c1a70d3/models/clasificador/
-> aws s3 cp s3://ml-models-proyecto3-2c1a70d3/models/clasificador/0.9.0/weights.pt - | sha256sum
-> # (debe diferir de e5aa4f73… que es el de 1.0.0)
-> ```
->
-> La `1.0.0` sigue como champion: `0.9.0` va en claves nuevas, no sobrescribe nada. **No
-> se evalúa el test con el run exp-01** (rompería M3): su tarjeta es solo de validación.
+### Publicación ejecutada en AWS (2026-10-02)
+
+La `0.9.0` se publicó en el bucket real `ml-models-proyecto3-2c1a70d3` con el baseline
+`t07-exp-01` (run `7693ef54d0884ebba1fc40348010bf29`), **con Model Registry** (versión 2
+de `clasificador`, etiqueta `semver=0.9.0`; el alias `champion` no se movió). Antes se
+ensayó en MinIO y se respaldó el bucket (`scripts/backup_s3_models.py`, solo lectura).
+
+```bash
+source scripts/host-env.sh
+python scripts/backup_s3_models.py
+python publish_model.py --run-id 7693ef54d0884ebba1fc40348010bf29 --version 0.9.0
+python -m serving.model_card --version 0.9.0 --upload
+```
+
+Sin `--overwrite`: la `0.9.0` va en claves nuevas y la `1.0.0` no se tocó. **No se evaluó
+el test con exp-01** (M3): su tarjeta (`reports/model_card/0.9.0/model_card.md`) es solo de
+validación y su línea de Selección nombra a `fe32e138…` (`1.0.0`) como el candidato
+congelado.
+
+Verificación leyendo el bucket después de publicar (lista de claves, SHA-256 de
+`weights.pt` descargado y `VersionId` de S3):
+
+```text
+versiones: ['models/clasificador/0.9.0/', 'models/clasificador/1.0.0/']
+1.0.0 5 archivos: ['classes.json', 'model_card.md', 'preprocess.json', 'summary.json', 'weights.pt']
+  sha256 weights.pt: e5aa4f73e607bf593eade2cc9c0194e468a425613aea8042f155c4a3e82af630
+  VersionId weights.pt = IYKTZQHILzQGwcKwU0ZzZmr_92pF_UpC
+  VersionId model_card.md = gVW1GG8UxJBe1QYt3t8ZOc8LrIlOcRmk
+0.9.0 8 archivos: ['classes.json', 'config.json', 'env.json', 'model_card.md', 'preprocess.json', 'requirements.lock', 'summary.json', 'weights.pt']
+  sha256 weights.pt: 9091584d7a101146f3d182f1d9ec342e5f451c0cd3948b6c361125303ad3b170
+  VersionId weights.pt = Qa0w9SYb96kCuVZ.rsaj2mgJAVZvp1al
+  VersionId model_card.md = 9OMYh4hayAokJ_yFDY.E7tY34gvGq1jt
+```
+
+- **Dos versiones recuperables con pesos distintos (5.3):** `1.0.0` (`e5aa4f73…`) y
+  `0.9.0` (`9091584d…`).
+- **Paquete completo (5.1):** la `0.9.0` trae los 7 archivos del paquete
+  (`config.json`, `env.json` y `requirements.lock` además de los 4 mínimos) más la tarjeta.
+- **La `1.0.0` quedó intacta:** mismos 5 archivos, mismo SHA-256 y el mismo `VersionId`
+  de su tarjeta (`gVW1GG8U…`) que ya había verificado el evaluador.
 
 ## Nota sobre `crops_source_boxes.csv`
 
