@@ -51,7 +51,8 @@ export function ReleaseSelector({
             <dd>
               <code title={release.provenance.manifestMd5 ?? ""}>
                 {short(release.provenance.manifestMd5)}
-              </code>
+              </code>{" "}
+              · <code>{release.paths.manifest}</code>
             </dd>
           </dl>
 

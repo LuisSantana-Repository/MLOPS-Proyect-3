@@ -70,6 +70,18 @@ export interface CropInfo {
   annId: string;
   /** URL del portal para ver el recorte (`GET /api/crops/...` de T12). */
   url: string;
+  /**
+   * Coordenadas de origen en la imagen del release (P2-1, `crops_source_boxes.csv`):
+   * la caja COCO y el rectángulo recortado. null si el archivo no está disponible.
+   */
+  sourceBox: CropSourceBox | null;
+}
+
+/** Caja COCO de origen `[x, y, w, h]` y rectángulo recortado (floor/ceil) de un recorte. */
+export interface CropSourceBox {
+  categoryId: number;
+  bbox: { x: number; y: number; w: number; h: number };
+  crop: { left: number; top: number; right: number; bottom: number };
 }
 
 /** Respuesta de GET /api/crops. */

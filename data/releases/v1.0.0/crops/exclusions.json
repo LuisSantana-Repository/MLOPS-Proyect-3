@@ -1,0 +1,27 @@
+{
+  "parametros": {
+    "min_area": 1024,
+    "min_images": 300,
+    "descartar_iscrowd": true
+  },
+  "cajas_descartadas": {
+    "area_menor_al_umbral": {
+      "n": 6,
+      "ann_ids": [
+        27,
+        380,
+        1398,
+        1451,
+        1452,
+        1453
+      ]
+    }
+  },
+  "clases_excluidas": [
+    {
+      "category_id": 3,
+      "category_name": "dog",
+      "motivo": "71 imágenes con caja válida (< 300)"
+    }
+  ]
+}
