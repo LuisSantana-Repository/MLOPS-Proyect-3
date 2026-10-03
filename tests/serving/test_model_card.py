@@ -184,6 +184,44 @@ def test_validation_only_card_for_non_winner(ctx: CardContext) -> None:
     assert "Matriz de confusión" not in card
 
 
+def _training_section(card: str) -> str:
+    """Solo la sección `## Modelo y entrenamiento` de la tarjeta."""
+    return card.split("## Modelo y entrenamiento", 1)[1].split("\n## ", 1)[0]
+
+
+def test_non_winner_card_does_not_claim_it_was_the_selected_candidate(ctx: CardContext) -> None:
+    """T16/5.3: la tarjeta de un run NO ganador (0.9.0, exp-01) no puede decir que fue el
+    candidato elegido en T07; debe nombrar al run que sí se congeló y su criterio."""
+    winner = "fe32e1388dbd465cae714a69bf80f685"
+    ctx.version = "0.9.0"
+    ctx.run_id = "7693ef54d0884ebba1fc40348010bf29"  # exp-01, baseline (no ganador)
+    ctx.run_name = "t07-exp-01"
+    ctx.selection = {**ctx.selection, "run_id": winner}
+    ctx.test = None  # no se evaluó test (M3)
+    section = _training_section(render_card(ctx))
+
+    assert "candidato elegido" not in section
+    assert "corrida de comparación" in section
+    assert "no elegida" in section
+    # Nombra al run congelado, su criterio y la versión publicada del ganador.
+    assert f"`{winner}`" in section
+    assert "min `best_val_loss` en val entre 10 corridas" in section
+    assert "versión `1.0.0`" in section
+    assert "el 2026-09-28T03:21:04+00:00, antes de abrir el test" in section
+    # El run de esta tarjeta sigue siendo el suyo, no el del ganador.
+    assert "- **Run de MLflow:** `7693ef54d0884ebba1fc40348010bf29` (t07-exp-01)" in section
+
+
+def test_winner_card_keeps_the_selected_candidate_line(ctx: CardContext) -> None:
+    """La tarjeta del ganador (1.0.0) no cambia: sigue diciendo que fue el candidato elegido."""
+    section = _training_section(render_card(ctx))
+    assert (
+        "- **Selección (T07):** candidato elegido por min `best_val_loss` en val entre 10 corridas, "
+        "congelado el 2026-09-28T03:21:04+00:00, antes de abrir el test."
+    ) in section
+    assert "corrida de comparación" not in section
+
+
 def test_non_winner_with_test_metrics_is_rejected(ctx: CardContext) -> None:
     """Si una versión que NO es el ganador trajera test_*, es incoherente (rompería M3)."""
     # ctx tiene test y es el ganador por defecto → coherente. Lo volvemos no-ganador
